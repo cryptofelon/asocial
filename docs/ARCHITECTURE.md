@@ -6,27 +6,32 @@
 
 ## 1. Decision summary
 
-Build asocial as a Manifest V3 WebExtension that reshapes X's existing website. Do not build an X client and do not call X APIs.
+Build asocial as a Manifest V3 WebExtension that reshapes X's existing website. Do not build an X client and do not call or intercept X APIs.
 
 Use:
 
 - current stable TypeScript in strict mode;
 - WXT as the extension framework and Vite integration;
 - React only for the popup and options/onboarding UI;
-- framework-free TypeScript and CSS in the content-script path;
+- framework-free TypeScript in the content-script path;
+- SCSS compiled at build time;
+- typed SCSS Modules for extension-owned UI through the author's `styletyper` packages;
+- non-module SCSS for page-wide startup and X-policy selectors;
 - pnpm with an exact `packageManager` version and committed lockfile;
 - a deliberately sparse pnpm workspace and Turborepo root;
 - Chrome local extension storage;
 - Vitest for pure behavior/adapter contracts and browser smoke checks for the actual extension.
 
-Do not add:
+Permanent exclusions:
 
-- a backend;
-- X API credentials;
-- a background service worker until a concrete feature requires one;
-- a state-management library;
-- remotely hosted code;
-- invented shared packages with one consumer.
+- no backend;
+- no telemetry, analytics, tracking pixels, usage counters, or remote configuration;
+- no X API credentials, private endpoint calls, or request interception;
+- no storage or logging of post text, handles, credentials, or browsing history;
+- no background service worker until a concrete feature proves it necessary;
+- no state-management library;
+- no remotely hosted code;
+- no invented shared packages with one consumer.
 
 The central architectural boundary is an **X DOM adapter**. Modes consume semantic surface annotations produced by that adapter; they do not contain scattered X selectors.
 
@@ -48,47 +53,103 @@ This architecture does not bypass X authentication, scrape content, or recreate 
 
 ### 3.1 WXT over hand-rolled Vite entries
 
-WXT is built for WebExtensions, uses Vite, supports TypeScript, generates manifests from entrypoints, and targets Chrome, Firefox, Edge, and Safari from one codebase. It removes custom build plumbing for popup pages, content scripts, CSS, manifests, development reload, and packaged artifacts.
+WXT is built for WebExtensions, uses Vite, supports TypeScript and SCSS, generates manifests from entrypoints, and targets Chrome, Firefox, Edge, and Safari from one codebase. It removes custom build plumbing for popup pages, content scripts, styles, manifests, development reload, packaging, and store submission.
 
-A custom Vite multi-entry build is possible, but it would make asocial own manifest generation and extension-specific dev/release behavior without product benefit. CRXJS is also viable; WXT's cross-browser target and file-based entrypoints fit the planned Safari path better.
+A custom Vite multi-entry build is possible, but it would make asocial own extension-specific development and release behavior without product benefit. CRXJS is also viable; WXT's cross-browser target and release tooling fit the planned path better.
 
 Use explicit imports. Do not lean on optional auto-import magic where a normal TypeScript import is clearer.
 
 ### 3.2 React only where there is application UI
 
-The popup and options/onboarding page share accessible form controls, settings validation, and live state. React is justified there.
+React is limited to four components:
 
-The content script is latency- and mutation-sensitive. It should use DOM APIs, a small controller, and static CSS directly. Mount only asocial's small journal shell in a Shadow Root; do not mount React over X or represent X content in React state.
+1. `Popup`
+2. `Options`
+3. `ModePicker`
+4. `SettingsForm`
 
-### 3.3 pnpm workspace and Turborepo
+Two additional TSX files are mount-only entrypoints: `popup/main.tsx` and `options/main.tsx`. The initial design therefore has exactly **six TSX files**, of which **four are React components**.
 
-The user requested pnpm workspaces and Turborepo. Keep them, but acknowledge the tradeoff: with one application package, Turbo gives no material performance benefit.
+The content script is latency- and mutation-sensitive. It uses DOM APIs, a small controller, and compiled policy styles directly. The journal shell remains vanilla TypeScript in a Shadow Root. Do not mount React over X or represent X content in React state.
+
+### 3.3 SCSS, CSS Modules, and styletyper
+
+`bootstrap.css` in the first draft was not the Bootstrap framework. It meant a tiny custom first-paint safety stylesheet. Rename it to **`startup-mask.scss`** so its purpose is unambiguous.
+
+Use two styling boundaries:
+
+- **Global non-module SCSS:** `startup-mask.scss` and `x-policies.scss`. These intentionally target `html[data-asocial-*]`, extension-owned DOM annotations, and stable X surface boundaries. CSS Modules would hash selectors that must be globally addressable and provide no type-safety benefit here.
+- **Typed SCSS Modules:** popup, options, shared React controls, and journal-shell presentation. These styles belong to elements asocial creates, so imported class maps are the correct boundary.
+
+Use both packages from [`cryptofelon/styletyper`](https://github.com/cryptofelon/styletyper) as direct development dependencies:
+
+- `vite-plugin-styletyper` in WXT's Vite configuration for development and build-time generation;
+- `styletyper` as the explicit CLI used before standalone type-checks on a fresh checkout.
+
+WXT orchestrates Vite builds, so validate the plugin under `wxt dev`, `wxt build`, and production packaging rather than assuming a plain Vite example is sufficient. The CLI keeps `tsc` deterministic even when Vite has not run:
+
+```json
+{
+  "scripts": {
+    "styles:types": "styletyper apps/extension",
+    "check": "pnpm styles:types && tsc --noEmit"
+  }
+}
+```
+
+Generated `*.module.*.d.ts` and `*.module.*.d.ts.map` files are compile-time artifacts and stay gitignored. The packaged extension contains only compiled CSS and JavaScript; styletyper adds no runtime code.
+
+Initial style inventory:
+
+| Style | Kind | Importer |
+|---|---|---|
+| `popup.module.scss` | typed module | `Popup.tsx` |
+| `options.module.scss` | typed module | `Options.tsx` |
+| `mode-picker.module.scss` | typed module | `ModePicker.tsx` |
+| `settings-form.module.scss` | typed module | `SettingsForm.tsx` |
+| `journal-shell.module.scss` | typed module, injected into the Shadow Root | `journal-shell/mount.ts` |
+| `startup-mask.scss` | global static content style | `entrypoints/content.ts` |
+| `x-policies.scss` | global content policy style | `entrypoints/content.ts` |
+
+That is **five SCSS Modules plus two global SCSS files**. Exactly **six source files import styles**; `content.ts` imports both global files. Do not split styles further until a component or loading boundary requires it.
+
+### 3.4 pnpm workspace and Turborepo
+
+The requested workspace/Turbo stack remains, but with one application package Turbo gives no material performance benefit yet.
 
 The initial workspace contains only `apps/extension`. Add a package only when a second real consumer exists. Likely future consumers are a public website, a reusable browser-agnostic behavior package, or a separately built Safari host—not hypothetical “shared,” “ui,” and “config” packages.
 
-Use current stable package versions once during scaffolding, then commit exact tool versions and `pnpm-lock.yaml`. “Latest” is a bootstrap policy, not a runtime dependency range.
+Use current stable package versions once during scaffolding, then commit exact tool versions and `pnpm-lock.yaml`. “Latest” is an initialization policy, not a runtime dependency range.
 
 ## 4. Repository shape
 
 ```text
 asocial/
+├── .github/
+│   └── workflows/
+│       ├── ci.yml
+│       └── release.yml
 ├── apps/
 │   └── extension/
 │       ├── entrypoints/
 │       │   ├── content.ts
 │       │   ├── popup/
 │       │   │   ├── index.html
-│       │   │   └── main.tsx
+│       │   │   ├── main.tsx
+│       │   │   ├── Popup.tsx
+│       │   │   └── popup.module.scss
 │       │   └── options/
 │       │       ├── index.html
-│       │       └── main.tsx
+│       │       ├── main.tsx
+│       │       ├── Options.tsx
+│       │       └── options.module.scss
 │       ├── src/
 │       │   ├── settings/
 │       │   │   ├── model.ts
 │       │   │   ├── normalize.ts
 │       │   │   └── repository.ts
 │       │   ├── runtime/
-│       │   │   ├── bootstrap.ts
+│       │   │   ├── startup.ts
 │       │   │   ├── mode-controller.ts
 │       │   │   ├── mutation-batcher.ts
 │       │   │   └── patch-ledger.ts
@@ -97,6 +158,7 @@ asocial/
 │       │   │   ├── normal.ts
 │       │   │   └── write-only.ts
 │       │   ├── x-adapter/
+│       │   │   ├── active-account.ts
 │       │   │   ├── adapter.ts
 │       │   │   ├── ownership.ts
 │       │   │   ├── routes.ts
@@ -104,16 +166,18 @@ asocial/
 │       │   │   └── surfaces.ts
 │       │   ├── journal-shell/
 │       │   │   ├── mount.ts
-│       │   │   └── styles.css
+│       │   │   └── journal-shell.module.scss
 │       │   └── ui/
-│       │       ├── mode-picker.tsx
-│       │       └── settings-form.tsx
+│       │       ├── ModePicker.tsx
+│       │       ├── mode-picker.module.scss
+│       │       ├── SettingsForm.tsx
+│       │       └── settings-form.module.scss
 │       ├── styles/
-│       │   ├── bootstrap.css
-│       │   ├── low-dopamine.css
-│       │   └── write-only.css
+│       │   ├── startup-mask.scss
+│       │   └── x-policies.scss
 │       ├── tests/
 │       │   ├── fixtures/
+│       │   ├── active-account.test.ts
 │       │   ├── adapter.test.ts
 │       │   ├── mode-controller.test.ts
 │       │   └── settings.test.ts
@@ -136,20 +200,22 @@ This is a target layout, not a requirement to create empty files or packages bef
 ```mermaid
 flowchart LR
   User[User] --> Popup[Popup / options]
-  Popup -->|write settings| Storage[chrome.storage.local]
+  Popup -->|write global settings| Storage[chrome.storage.local]
   Storage -->|onChanged| Controller[Mode controller]
-  X[X DOM and SPA navigation] --> Adapter[X DOM adapter]
+  X[X DOM and SPA navigation] --> Identity[Active-account detector]
+  X --> Adapter[X DOM adapter]
+  Identity -->|self / other / unknown| Adapter
   Adapter -->|semantic annotations| Controller
   Controller --> Normal[Normal policy]
   Controller --> Low[Low-dopamine policy]
   Controller --> Write[Write-only policy]
-  Low -->|CSS + reversible attribute patches| X
+  Low -->|compiled SCSS + reversible patches| X
   Write --> Shell[asocial journal shell]
-  Write -->|allowlist native composer| X
+  Write -->|allowlist composer and account switcher| X
   X -->|user clicks native Post| XService[X service]
 ```
 
-There is no asocial server in this flow. The extension never receives X credentials and never constructs a post request.
+There is no asocial server in this flow. The extension never receives X credentials, stores an account handle, or constructs a post request.
 
 ## 6. Manifest and permissions
 
@@ -163,7 +229,7 @@ Baseline Manifest V3 capabilities:
       "matches": ["https://x.com/*", "https://twitter.com/*"],
       "run_at": "document_start",
       "world": "ISOLATED",
-      "css": ["bootstrap.css"],
+      "css": ["startup-mask.css", "x-policies.css"],
       "js": ["content.js"]
     }
   ],
@@ -172,9 +238,9 @@ Baseline Manifest V3 capabilities:
 }
 ```
 
-WXT generates the final manifest; the snippet documents intent.
+WXT compiles the SCSS and generates the final manifest; the snippet documents the production output.
 
-Do not request these in MVP:
+Do not request:
 
 - `cookies`;
 - `webRequest` or `declarativeNetRequest`;
@@ -184,27 +250,30 @@ Do not request these in MVP:
 - `<all_urls>`;
 - externally connectable messaging.
 
-If popup-to-tab diagnostics need `activeTab`, first prove the existing X host grant and normal tab messaging are insufficient. Permissions must follow implemented behavior, not anticipated behavior.
+If popup-to-tab diagnostics need `activeTab`, first prove the existing X host grant and normal tab messaging are insufficient. Permissions follow implemented behavior, not anticipated behavior. CI inspects the built manifest against this allowlist.
 
 ## 7. Settings model
 
-Keep one versioned object and normalize every read from storage.
+Keep one versioned global object and normalize every read from storage. Account identity is runtime state, not a setting.
 
 ```ts
 type Mode = "normal" | "low-dopamine" | "write-only";
 type Visibility = "normal" | "quiet" | "hidden";
+type Toggle = "shown" | "hidden";
 
 type SettingsV1 = {
   schemaVersion: 1;
   mode: Mode;
-  confirmedHandles: string[];
   lowDopamine: {
     metricScope: "self" | "all";
+    profileRelationshipLinks: Toggle;
     notifications: Visibility;
     messages: Visibility;
-    mentionsShortcut: "shown" | "hidden";
-    trendsAndRecommendations: "shown" | "hidden";
-    premiumAndAnalytics: "shown" | "hidden";
+    mentionsShortcut: Toggle;
+    trends: Toggle;
+    recommendedPosts: Toggle;
+    accountSuggestions: Toggle;
+    premiumAndAnalytics: Toggle;
   };
 };
 ```
@@ -215,13 +284,15 @@ Defaults:
 const defaults: SettingsV1 = {
   schemaVersion: 1,
   mode: "normal",
-  confirmedHandles: [],
   lowDopamine: {
     metricScope: "self",
+    profileRelationshipLinks: "hidden",
     notifications: "quiet",
     messages: "quiet",
     mentionsShortcut: "shown",
-    trendsAndRecommendations: "hidden",
+    trends: "hidden",
+    recommendedPosts: "hidden",
+    accountSuggestions: "hidden",
     premiumAndAnalytics: "hidden",
   },
 };
@@ -230,50 +301,57 @@ const defaults: SettingsV1 = {
 Normalization rules:
 
 - Treat storage as `unknown`; validate enum values and object shapes.
-- Normalize handles by trimming whitespace, removing one leading `@`, and lowercasing for comparison.
-- Deduplicate handles and reject empty/invalid path segments.
 - Do not throw on an older or damaged settings object.
-- If low-dopamine is selected with no confirmed handles, resolve the effective metric scope to `all`; do not silently rewrite the user's saved preference.
 - Keep migrations pure and covered by fixture tests.
-- Store the object in `chrome.storage.local`, not X page storage or Chrome sync.
+- Store only this object in `chrome.storage.local`, not X page storage or Chrome sync.
+- Persist mode before applying a user-requested transition.
+- Do not add per-handle or per-account settings.
+- Do not persist the automatically detected handle, even temporarily.
 
 ## 8. Startup and no-flash strategy
 
-The restrictive modes fail if X paints a feed or metric before hiding it. Startup therefore has a small, synchronous bootstrap separate from DOM adaptation.
+`startup-mask.scss` is a custom safety stylesheet, not Bootstrap. Its only job is to prevent X from painting before asocial has resolved the persisted mode.
 
 ### Sequence
 
-1. Statically injected `bootstrap.css` is available before page rendering.
-2. At `document_start`, the first content-script statement marks the document `data-asocial-bootstrap="pending"` and starts a short fail-open watchdog.
-3. Bootstrap CSS hides page rendering while that marker is pending.
-4. Read and normalize local settings asynchronously.
-5. Apply the mode marker and complete the first annotation/mask pass.
-6. Mount the journal shell if needed.
-7. Change bootstrap state to `ready`, revealing only what the resolved mode allows.
-8. Cancel the watchdog.
+1. WXT compiles `startup-mask.scss` to a statically declared content stylesheet, injected before DOM construction/rendering.
+2. At `document_start`, the first content-script statements mark the document `data-asocial-startup="pending"` and schedule a recovery-shell timeout.
+3. The startup mask hides page rendering while that marker is pending.
+4. Read and normalize the global settings from `chrome.storage.local`.
+5. Apply the stored mode:
+   - Normal: remove the mask without starting a DOM observer.
+   - Low-dopamine: classify active identity and required existing surfaces, apply policy, then reveal.
+   - Write-only: mount the journal shell, install the default-deny page policy, then reveal only the shell/allowlisted controls.
+6. Change startup state to `ready`.
+7. Cancel the recovery timeout.
 
-Conceptual CSS:
+Conceptual SCSS:
 
-```css
-html[data-asocial-bootstrap="pending"] body {
+```scss
+html[data-asocial-startup="pending"] body {
   visibility: hidden !important;
 }
 ```
 
-The watchdog exists only to prevent a content-script defect from leaving X permanently blank. It removes the pending curtain and marks diagnostics as degraded if startup has not completed within a conservative timeout. Once write-only has loaded successfully, adapter failure remains fail-closed: the journal shell stays visible and X reading surfaces stay masked.
+The timeout does **not** reveal X. If storage or startup fails, it mounts an asocial-owned recovery shell while X remains masked. The toolbar popup provides a deliberate Normal-mode escape. This chooses a temporary lockout over an attention leak; disabling the extension always removes its static styles.
 
-Test the timeout rather than guessing it. `chrome.storage.local` is expected to resolve quickly, but the chosen threshold should cover cold browser startup on the minimum supported machine without causing a visible feed flash.
+`chrome.storage.local` persists Write-only across tab closure, browser restart, and extension update. Reopening X therefore repeats the masked startup and returns to the journal rather than briefly painting a feed.
+
+The initial `visibility` curtain is only a pre-classification safety mechanism. After Write-only is established, disallowed X regions use `display: none` or equivalent structural removal so they consume no layout, paint, pointer, or accessibility work.
+
+Test cold tab open, browser restart, extension update, slow storage, and injected startup failure with Chrome navigation filmstrips. “No flash” is a measured release invariant, not an assumption.
 
 ## 9. Mode controller
 
 `ModeController` is the only owner of active behavior. It receives normalized settings and performs an explicit transition:
 
-1. stop the previous mode;
-2. disconnect its observer;
-3. restore reversible attribute patches;
-4. remove asocial annotations and shell UI;
-5. apply the next mode's first pass;
-6. start only the observer needed by that mode.
+1. persist a user-requested mode;
+2. stop the previous mode;
+3. disconnect its observer;
+4. restore reversible attribute patches;
+5. remove asocial annotations and shell UI;
+6. apply the next mode's first safe state;
+7. start only the observer needed by that mode.
 
 ### Normal
 
@@ -284,19 +362,22 @@ Test the timeout rather than guessing it. `chrome.storage.local` is expected to 
 
 ### Low-dopamine
 
+- Derive active-account state from redundant live DOM signals.
 - Run adapter annotation on the existing root once.
 - Set the effective policy as document attributes.
 - Start the mutation batcher for incremental changes.
-- Reclassify when the route or detected active account changes.
+- Clear identity to `unknown` immediately when either account signal changes.
+- Reclassify only after both signals agree again.
 
 ### Write-only
 
-- Set the write-only page mask before processing X content.
+- Set the default-deny page mask before processing X content.
 - Mount the journal shell in an extension-owned Shadow Root.
-- Observe only for native composer mount/unmount and route state.
-- Mark a safely identified native composer subtree as allowed.
-- Keep all other X content hidden visually and from the accessibility tree.
-- When the composer closes, remove its allowlist annotation and retain the shell.
+- Do not scan or annotate timeline posts.
+- Observe only route, native composer, self-thread continuation, authentication, and account-switcher boundaries.
+- Mark only complete allowlisted subtrees as visible.
+- Keep all other X content absent from layout, paint, pointer input, and the accessibility tree.
+- When a composer closes, remove its allowlist annotation and retain the shell and Write-only mode.
 
 The controller is idempotent. Applying the same settings twice must not duplicate observers, roots, styles, or annotations.
 
@@ -307,12 +388,14 @@ X is an unversioned external UI. Treat it like an unstable vendor adapter.
 ### Responsibilities
 
 - detect route class without importing X internals;
+- derive the active account from redundant current-page signals;
 - detect supported surfaces in a supplied subtree;
-- identify post/profile ownership;
+- identify post/profile ownership without persistent identity storage;
 - distinguish metric value nodes from their action containers;
-- identify the native composer and required descendants;
+- identify the native composer, self-thread continuation, and required descendants;
+- identify the native account-switcher button and its portal menu;
 - annotate matched elements with asocial-owned `data-asocial-*` attributes;
-- report rule IDs and match health without reporting content.
+- report rule IDs and signal agreement without reporting handles or content.
 
 ### Selector priority
 
@@ -322,9 +405,26 @@ X is an unversioned external UI. Treat it like an unstable vendor adapter.
 4. Stable input properties.
 5. Localized accessible labels only behind a locale-specific adapter.
 
-Never depend on generated class names, React fiber internals, bundled source, or X's private network operations.
+Never depend on generated class names, React fiber internals, bundled source, cookies, or X's private network operations.
 
 The initial adapter is validated against X in English. Rules that rely on visible or accessible text must declare their locale. Language-independent attributes are preferred so localization can expand without forking mode logic.
+
+### Active-account detection
+
+`ActiveAccountDetector` derives an in-memory normalized handle from two independent DOM surfaces:
+
+1. the native profile-navigation link's `href`;
+2. the account identity exposed inside the native `data-testid="SideNav_AccountSwitcher_Button"` surface.
+
+Neither signal is a contractual X API, so both remain adapter rules with fixtures and live release checks. The detector never reads cookies, local storage, page JavaScript state, or network responses.
+
+State machine:
+
+- both signals agree: `known(handle)`;
+- either signal changes, is absent, or disagrees: `unknown`;
+- after an account switch, require agreement on the new handle before returning to `known`.
+
+The handle exists only in content-script memory for equality comparison. Do not put it in extension storage, messages, diagnostics, or logs.
 
 ### Surface vocabulary
 
@@ -333,7 +433,7 @@ Use a closed union rather than arbitrary selector strings in modes:
 ```ts
 type Surface =
   | "post"
-  | "profile-relationship-count"
+  | "profile-relationship-link"
   | "profile-post-count"
   | "reply-metric"
   | "repost-metric"
@@ -347,9 +447,13 @@ type Surface =
   | "messages-nav"
   | "messages-badge"
   | "trend"
-  | "recommendation"
+  | "recommended-post"
+  | "account-suggestion"
   | "premium-prompt"
-  | "composer";
+  | "composer"
+  | "self-thread-context"
+  | "account-switcher-button"
+  | "account-switcher-menu";
 ```
 
 Modes depend on this vocabulary. Only adapter rules know how a surface maps to current X markup.
@@ -361,7 +465,7 @@ For each post/profile:
 1. locate the semantic author/profile link;
 2. parse and normalize its first path segment;
 3. reject reserved X paths such as `home`, `explore`, `notifications`, `messages`, `i`, and `compose`;
-4. compare case-insensitively with confirmed handles;
+4. compare case-insensitively with the detector's current `known(handle)`;
 5. return `self`, `other`, or `unknown`.
 
 Policy:
@@ -421,30 +525,29 @@ If X places a count in an action's `aria-label`, visually hiding a child span is
 
 The live-DOM implementation spike must inspect this behavior before declaring accessibility acceptance complete.
 
-## 13. Write-only shell and composer allowlist
+## 13. Write-only shell and native-control allowlist
 
-Write-only is default-deny.
+Write-only is persistent and default-deny.
 
 ### Shell
 
 - Add one fixed `#asocial-root` sibling under `body`.
 - Attach a Shadow Root so X styles cannot accidentally restyle the shell.
-- Include product name, “Write on X,” the audience reminder, current handle, and a recovery link that opens the extension settings.
+- Apply `journal-shell.module.scss` inside that Shadow Root through the WXT UI injection path; validate the compiled class map and injected stylesheet in the production build.
+- Include product name, “Write on X,” the audience reminder, in-memory active-account status, and a recovery link that opens extension settings.
 - Keep mode switching in the extension toolbar/options surface; do not imitate X navigation.
 
 ### Page mask
 
-Mask X's page root and direct body children except the asocial root. Use a mechanism that permits an explicitly marked composer descendant to become visible and interactive. Validate both pointer behavior and accessibility-tree behavior in Chrome; CSS `visibility` inheritance and X portal structure must be tested against the real composer.
+The startup mask initially hides the page before classification. Once Write-only is known, structurally remove all X roots except complete allowlisted surfaces. The final state must remove disallowed content from layout, paint, pointer input, and the accessibility tree.
 
 Do not build an asocial text area and copy its content into X. That creates draft custody, synchronization, and accidental-posting risks.
 
-### Opening the composer
+### Opening and completing the composer
 
-“Write on X” is an explicit user action. It may navigate the current X tab to X's published `/compose/post` route. X remains responsible for rendering, validation, media, audience controls, and submission.
+“Write on X” is an explicit user action. It may navigate the current X tab to X's published `/compose/post` route. X remains responsible for rendering, validation, media, audience controls, native multi-post thread controls, and submission.
 
-### Composer detection
-
-A rule must match the composer dialog and at least these required sub-surfaces before allowlisting it:
+A composer rule must match at least:
 
 - editable input;
 - native submit button;
@@ -453,45 +556,86 @@ A rule must match the composer dialog and at least these required sub-surfaces b
 
 If the complete contract is not met, reveal none of the candidate subtree. Show “X's composer could not be identified; switch to Normal to continue.”
 
+Detect composer closure by removal of the allowlisted root, not by inspecting the network request or post text. Posting, cancellation, and native multi-post completion all return to the journal shell with Write-only still persisted.
+
+### Self-thread continuation
+
+Support X's native multi-post composer first. A post-submit reply-to-self flow is allowed only when:
+
+- active-account signals agree;
+- the parent post is classified `self`;
+- only the minimum self-authored parent context and native reply composer can be isolated;
+- no surrounding conversation or metrics are exposed.
+
+If any invariant fails, keep the route masked. Do not broaden the allowlist or inspect a private API to recover the flow.
+
+### Native account switching
+
+Allowlist the current X `SideNav_AccountSwitcher_Button` and the portal menu opened by a direct user action on that button.
+
+The menu contract requires:
+
+- a menu/dialog root attributable to that click;
+- native account choices and add/manage-account actions only;
+- unread counts/badges and unrelated navigation hidden;
+- lifetime tied to the native menu's open state.
+
+On selection, immediately clear active identity to `unknown`, keep all metrics hidden, and wait for profile-nav and account-switcher signals to agree on the new handle. Settings and Write-only remain global and unchanged.
+
+If the button or menu cannot be isolated safely after an X change, expose neither and retain a Normal-mode escape.
+
 ### Authentication and recovery
 
-Authentication is not a reading surface, but it is also not part of the composer contract. Recognized X login, challenge, and account-recovery routes may use a separate, narrow allowlist after live validation. If a route is unknown, keep X masked and offer a user-initiated switch to Normal; never broaden the composer allowlist to make login “work.”
+Authentication is not a reading surface, but it is also not part of the composer contract. Recognized X login, challenge, and account-recovery routes may use a separate, narrow allowlist after live validation. If a route is unknown, keep X masked and offer a user-initiated switch to Normal; never broaden another allowlist to make login “work.”
 
-### Completion
+### Fetching boundary
 
-Detect closure by removal of the allowlisted composer root, not by inspecting the network request or post text. The journal shell then remains. Posting success versus cancel does not need to be distinguished in MVP.
+asocial can guarantee that reading surfaces are not rendered. It cannot guarantee X's application will not fetch timeline data. Blocking private requests would require broader permissions and a brittle dependency on X internals; do not implement it.
 
 ## 14. UI surfaces
 
 ### Popup
 
-Fast path:
+`Popup.tsx` composes:
 
-- three-option mode picker;
+- `ModePicker`;
 - effective current mode;
 - “Write on X” action in write-only;
-- current confirmed handle status;
+- active-account signal status (`known`/`unknown`) without displaying or persisting the handle;
 - link to detailed settings;
 - adapter health warning when the active X tab reports required rule failures.
 
 ### Options/onboarding
 
+`Options.tsx` composes `SettingsForm` and includes:
+
 - plain-language explanation of modes;
 - explicit public-audience warning;
-- handle detection and confirmation;
 - low-dopamine settings;
+- independently removable Mentions shortcut;
+- independent trend, recommended-post, and account-suggestion toggles;
 - local diagnostics and reset;
-- no account login or cloud account.
+- no handle field, account login, cloud account, telemetry consent, or analytics preference.
 
 Use native form elements where possible. No design-system dependency is needed.
+
+### React and style count
+
+- Six TSX files total.
+- Four React components.
+- Five typed SCSS Modules.
+- Two global SCSS files.
+- Six source files import styles.
+- Zero React roots in the X content path.
 
 ## 15. Messaging and diagnostics
 
 Most state propagation needs no background worker:
 
-- popup/options write `chrome.storage.local`;
+- popup/options write global settings to `chrome.storage.local`;
 - every X content script listens to `chrome.storage.onChanged`;
-- open tabs apply the new settings directly.
+- open tabs apply the new settings directly;
+- browser restart reloads the persisted mode before revealing X.
 
 For diagnostics, the popup may send a one-shot message to the active X content script and receive:
 
@@ -500,13 +644,14 @@ type AdapterStatus = {
   adapterVersion: string;
   mode: Mode;
   routeClass: string;
+  activeAccount: "known" | "unknown";
   requiredRules: Record<string, "matched" | "missing" | "not-applicable">;
 };
 ```
 
-Do not include DOM text, URLs beyond a route class, handles beyond the locally confirmed settings display, or post identifiers.
+Do not include DOM text, handles, full URLs, account IDs, post identifiers, or browsing history.
 
-Add a background service worker only if a later requirement cannot be met by popup/options/content contexts—for example, a browser command that must work with no X tab loaded. Its absence in MVP reduces lifecycle and storage complexity.
+Add a background service worker only if a later requirement cannot be met by popup/options/content contexts—for example, a browser command that must work with no X tab loaded. Release automation is external CI and does not justify runtime background code.
 
 ## 16. Security and privacy model
 
@@ -516,34 +661,47 @@ Add a background service worker only if a later requirement cannot be met by pop
 - Extension settings are untrusted persisted JSON until normalized.
 - X remains the only party handling X credentials and publishing.
 - asocial UI never treats DOM text as HTML or executable data.
+- GitHub Actions and browser-store credentials exist only in protected release infrastructure, never in the extension.
 
 ### Controls
 
 - Run content code in Chrome's isolated world.
 - Render shell strings with DOM text nodes/React escaping, never `innerHTML` from X.
 - Keep all executable code in the extension package.
-- Use no `eval`, remote scripts, analytics SDKs, or remote configuration.
+- Use no `eval`, remote scripts, analytics SDKs, telemetry, tracking pixels, or remote configuration.
 - Use no network request APIs in product code.
-- Keep handle/settings storage local.
+- Store only normalized global settings locally.
+- Keep detected handles in content-script memory only and omit them from messages/logs.
 - Restore every patched X attribute on Normal transition.
-- Avoid logging content in development helpers and tests.
+- Avoid logging content or identifiers in development helpers and tests.
+- Inspect built permissions and remote-code absence in CI.
+- Publish through a protected GitHub environment with manual approval and least-privilege store secrets.
 
-A public Chrome Web Store release still needs an accurate privacy policy and disclosures because the extension can read and change an X page, even if it transmits nothing.
+A public Chrome Web Store release still needs an accurate privacy policy and disclosures because the extension can read and change an X page, even though it transmits nothing.
 
 ## 17. Testing strategy
 
 ### Pure unit tests
 
 - settings defaults, normalization, corruption handling, and migrations;
-- handle normalization and reserved-path rejection;
-- ownership policy matrix;
+- active-account agreement, disagreement, switch transition, and non-persistence;
+- reserved-path rejection and ownership policy matrix;
 - mode-controller idempotence and cleanup;
 - mutation queue deduplication;
 - patch-ledger exact restoration.
 
+### Style pipeline tests
+
+- run `styletyper` before standalone TypeScript checks on a clean checkout;
+- prove every SCSS Module class reference type-checks;
+- run WXT development and production builds with `vite-plugin-styletyper`;
+- verify generated declarations/maps are untracked and absent from the package;
+- verify `startup-mask.scss` and `x-policies.scss` compile to manifest-declared static CSS;
+- verify journal-shell styles are injected inside its Shadow Root.
+
 ### DOM adapter contract tests
 
-Maintain small, sanitized HTML fixtures representing only required X structure. No real post text, profile data, cookies, or captured page dumps.
+Maintain small, sanitized HTML fixtures representing only required X structure. No real post text, handles, profile data, cookies, or captured page dumps.
 
 For every supported context, assert both halves:
 
@@ -552,13 +710,16 @@ For every supported context, assert both halves:
 
 Contexts:
 
+- agreeing and disagreeing active-account signals;
+- account switch transition;
 - own and other post in timeline;
 - own and other profile;
 - focused own and other post;
-- quote post;
-- repost menu;
+- quote post and repost menu;
 - notification/message navigation and badges;
-- native composer, composer with media, and composer error state;
+- native composer, native multi-post, media, and error state;
+- supported and rejected self-thread continuation;
+- native account-switcher button/menu and changed markup;
 - unknown ownership;
 - markup with one required selector missing.
 
@@ -566,51 +727,83 @@ Contexts:
 
 Run a built unpacked extension in Chromium against synthetic pages to verify:
 
-- Manifest and static injection;
-- startup curtain timing;
+- manifest and static style injection;
+- cold-start, reopen, restart, slow-storage, and extension-update masking;
+- startup failure produces a recovery shell without revealing X;
 - cross-context storage propagation;
 - popup/options state;
-- mode cleanup;
+- exact Normal cleanup;
 - Shadow Root shell isolation;
-- fail-open watchdog;
-- no extension-originated network requests.
+- no extension-originated network requests;
+- no timeline-post annotation in Write-only;
+- built permission allowlist.
 
 ### Authenticated manual release matrix
 
-Do not put X credentials in CI. Before a private release, manually exercise current X in Chrome:
+Do not put X credentials in CI. Before a release, manually exercise current X in Chrome:
 
 - home/Following/For You;
 - own profile and another profile;
 - own post and another post;
-- compose text, media, and cancel;
+- compose text, media, cancel, and native multi-post thread;
+- supported self-thread continuation;
 - quote/repost control;
 - Notifications, Mentions, and Messages;
 - search/direct reading routes in write-only;
+- native account switching in Write-only;
+- tab close/reopen and full Chrome restart while Write-only is persisted;
 - light/dim/dark themes;
-- narrow and wide desktop viewport;
-- X account switching if enabled.
+- narrow and wide desktop viewport.
 
-Record rule health and a navigation filmstrip, not user content. A selector fixture is updated only after the new live behavior is understood.
+Record rule health, performance traces, and navigation filmstrips without user content or handles. A selector fixture is updated only after the new live behavior is understood.
 
 ## 18. Build and release
 
-Root Turbo tasks should forward only real package tasks:
+### Workspace tasks
 
-- `dev` — persistent WXT development task;
-- `build` — reproducible unpacked extension build;
-- `check` — TypeScript and focused static checks;
+Root Turbo tasks forward only real package tasks:
+
+- `styles:types` — one-shot styletyper CLI generation;
+- `dev` — persistent WXT development task with the styletyper Vite plugin;
+- `check` — style generation, TypeScript, and focused static checks;
 - `test` — deterministic unit/adapter contracts;
-- `zip` — WXT package artifact after `build`.
+- `build` — reproducible unpacked extension build;
+- `zip` — WXT package artifact after `build`;
+- `submit` — protected WXT store submission, never a normal local default.
 
 Do not run the persistent `dev` task through a normal finite CI command.
 
-Private MVP distribution:
+### Continuous integration
 
-1. build a local unpacked artifact;
-2. load it through `chrome://extensions` developer mode;
-3. run the authenticated manual matrix;
-4. create a versioned ZIP for personal installation/backup;
-5. keep the Git repository local or on a private remote.
+Every pull request and main-branch push runs:
+
+1. checkout without persisted credentials;
+2. exact Node/Corepack/pnpm toolchain setup;
+3. `pnpm install --frozen-lockfile`;
+4. `pnpm styles:types`;
+5. checks and deterministic tests;
+6. production WXT build;
+7. built-manifest permission/host allowlist inspection;
+8. package scan for remote code, analytics endpoints, and generated style declarations.
+
+Fork pull requests receive no release secrets.
+
+### Release workflow
+
+The first Chrome Web Store listing and consent setup are manual. Subsequent updates use a protected tag/manual-dispatch workflow:
+
+1. require version, tag, and changelog consistency;
+2. repeat the frozen CI pipeline;
+3. create WXT ZIP artifacts;
+4. produce SHA-256 checksums;
+5. create a GitHub Release;
+6. wait for approval on a protected production environment;
+7. submit the Chrome update with WXT using least-privilege protected secrets;
+8. record the store submission result without publishing credentials or user data.
+
+Do not auto-submit every merge to `main`.
+
+Brave installs and updates Chrome Web Store extensions. There is no separate Brave Extension Store deployment; validate the Chrome package in Brave and document compatibility.
 
 Before store publication:
 
@@ -618,7 +811,7 @@ Before store publication:
 - inspect the generated manifest and permission warnings;
 - add the required privacy policy and store disclosures;
 - remove development-only permissions and logs;
-- perform a clean-profile install test.
+- perform clean-profile Chrome and Brave install tests.
 
 ## 19. Safari/iOS path
 
@@ -663,23 +856,30 @@ Technically preferable for one package, but not selected because the requested p
 ## 21. Implementation order
 
 1. Scaffold the sparse pnpm/Turbo/WXT repository and pin the toolchain.
-2. Implement settings normalization/repository and the three-mode popup.
-3. Implement startup curtain, mode controller, cleanup, and cross-tab propagation against synthetic pages.
-4. Spike the current live X DOM and document the smallest semantic adapter surface.
-5. Implement low-dopamine ownership and metric annotations; prove controls remain operable.
-6. Implement notification/message/trend/prompt rules.
-7. Implement the write-only shell and strict native-composer allowlist.
-8. Run the authenticated route matrix and repair selector/accessibility gaps.
-9. Package a private Chrome build.
+2. Integrate Sass, `styletyper`, and `vite-plugin-styletyper`; prove clean-checkout type generation and production WXT CSS output.
+3. Implement global settings normalization/repository and the three-mode popup.
+4. Implement the static startup mask, fail-closed recovery shell, mode controller, cleanup, and cross-tab/restart propagation against synthetic pages.
+5. Spike current live X active-account and account-switcher DOM surfaces; document the smallest semantic contracts.
+6. Implement low-dopamine identity/ownership and metric annotations; prove controls remain operable.
+7. Implement independent notification, message, Mentions, trend, recommended-post, account-suggestion, and prompt rules.
+8. Implement the persistent Write-only shell, strict native-composer allowlist, native multi-post flow, and account-switcher allowlist.
+9. Add self-thread continuation only after its minimal context can be isolated safely.
+10. Run the authenticated route/performance matrix and repair selector, accessibility, and flash gaps.
+11. Package a private Chrome/Brave build.
+12. Add protected CI/release automation after the first manual store listing exists.
 
-Do not begin with every selector. Prove the vertical slice first: mode selection → stored policy → one own-post metric hidden → Normal restores it exactly.
+Do not begin with every selector. Prove the vertical slice first: persisted mode → static startup mask → automatic active identity → one own-post metric hidden → Normal restores it exactly.
 
 ## 22. Sources
 
-- Chrome, [Manifest content scripts](https://developer.chrome.com/docs/extensions/reference/manifest/content-scripts.md.txt): static CSS ordering, match patterns, `document_start`, and isolated worlds.
+- Chrome, [Manifest content scripts](https://developer.chrome.com/docs/extensions/reference/manifest/content-scripts.md.txt): static style ordering, match patterns, `document_start`, and isolated worlds.
 - Chrome, [`chrome.storage`](https://developer.chrome.com/docs/extensions/reference/api/storage): extension-local persistence and change events available to content scripts.
 - Chrome Web Store, [Program Policies](https://developer.chrome.com/docs/webstore/program-policies/policies): narrow permissions, limited use, disclosure, and remotely hosted code constraints.
 - WXT, [official overview](https://wxt.dev/): Vite-based extension development, TypeScript, generated manifests, and cross-browser targets.
+- WXT, [Content scripts](https://wxt.dev/guide/essentials/content-scripts.html): content-script style handling and UI injection.
+- WXT, [Publishing](https://wxt.dev/guide/essentials/publishing.html): ZIP generation, store submission, and GitHub Actions release path.
+- [`cryptofelon/styletyper`](https://github.com/cryptofelon/styletyper): typed CSS/SCSS Modules, Vite plugin, CLI, generated declaration maps, and compile-time-only output.
+- Brave, [installing extensions](https://support.brave.com/hc/en-us/articles/360017909112-How-can-I-add-extensions-to-Brave): Chrome Web Store compatibility.
 - Apple, [Safari Extensions](https://developer.apple.com/safari/extensions/): conversion and packaging path for WebExtensions on Apple platforms.
 - X, [Terms of Service](https://x.com/en/tos): re-check before any public distribution.
 - [Control Panel for Twitter](https://soitis.dev/control-panel-for-twitter): an existing cross-browser extension demonstrates that user-controlled X presentation and a later Safari/iOS distribution path are practical. It is feasibility evidence, not a code dependency.
