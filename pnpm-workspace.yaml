@@ -2,3 +2,5 @@ packages:
   - apps/*
 allowBuilds:
   "@parcel/watcher": true
+minimumReleaseAgeExclude:
+  - vite-plugin-styletyper@0.2.2
