@@ -40,7 +40,7 @@ The central architectural boundary is an **X DOM adapter**. Modes consume semant
 The required behavior is presentation control over an authenticated website:
 
 - hide or quiet selected X surfaces;
-- preserve X's own composer and action controls;
+- preserve X's own composer and action semantics, even when Low-dopamine compacts a known self-post action row;
 - react to X's client-side navigation;
 - keep authentication and posting inside X;
 - restore the original page immediately.
@@ -424,6 +424,7 @@ type Surface =
   | "like-metric"
   | "bookmark-metric"
   | "view-metric"
+  | "self-post-actions"
   | "analytics-entry"
   | "notifications-nav"
   | "notifications-badge"
@@ -471,7 +472,7 @@ Use one `MutationObserver` per active restrictive mode:
 - add only changed roots to a `Set<Node>`;
 - batch processing into one microtask or animation frame;
 - collapse descendant roots when an ancestor is already queued;
-- run adapter rules only inside queued roots;
+- run adapter rules inside queued roots, expanding only to the nearest containing post when an action-row mutation requires reclassification;
 - compare `location.pathname` once per batch to detect route changes;
 - listen to `popstate` as an additional signal;
 - use the browser Navigation API only as an optional progressive enhancement.
@@ -481,7 +482,7 @@ Do not monkey-patch `history.pushState` in X's main JavaScript world. A normal r
 
 Observe only the attributes required by a proven rule. Avoid a global unfiltered attribute observer and avoid timers that rescan the document.
 
-## 12. Hiding metrics without removing actions
+## 12. Hiding metrics and compacting self-post actions
 
 CSS must target an annotated metric value, not the surrounding button.
 
@@ -502,11 +503,20 @@ html[data-asocial-mode="low-dopamine"] [data-asocial-owner="self"] [data-asocial
 }
 ```
 
-The actual X markup may require annotating an intermediate wrapper. The invariant is stable: the metric node can disappear while the button remains.
+The actual X markup may require annotating an intermediate wrapper. For other-user and unknown-owner posts, the invariant is stable: the metric node can disappear while the native button remains.
 
-If X places a count in an action's `aria-label`, visually hiding a child span is insufficient. The adapter must set a count-free accessible action name and record the original attribute in a `PatchLedger`. On transition to Normal or element reclassification, restore the original value exactly. Attribute changes from X must update the patch safely; never leave a stale “Like” label on an “Unlike” action.
+If X places a count in an action's `aria-label`, visually hiding a child span is insufficient. The adapter sets a count-free accessible action name and records the original attribute in a `PatchLedger`. On transition to Normal or element reclassification, it restores the original value exactly. Attribute changes from X update the patch safely; asocial never leaves a stale “Like” label on an “Unlike” action.
 
-The live-DOM implementation spike must inspect this behavior before declaring accessibility acceptance complete.
+For a known self post, `compact-actions.ts` locates a native `role="group"` containing at least two recognized controls from the outer post. It excludes controls whose nearest post is a nested quote. The adapter then:
+
+1. inserts one extension-owned, vanilla-DOM ellipsis trigger and menu into that group;
+2. hides the group's pre-existing action cells, including Like;
+3. offers Reply, Repost / quote, View analytics, Bookmark or Remove bookmark, and Share only when the corresponding native control exists;
+4. resolves and clicks the current native control on activation, preserving X's composers, menus, analytics navigation, bookmark state, and share dialogs;
+5. supports focus transfer, Escape, Home, End, and wrapping arrow-key navigation;
+6. positions the menu above or below the trigger according to current viewport space.
+
+The trigger/menu is idempotently resynchronized after X replaces an action subtree. If ownership is unknown, fewer than two recognized controls share a native group, or the group cannot be isolated, asocial leaves the native row intact and hides only metric values. Switching ownership or entering Normal removes the inserted menu and every action-cell marker.
 
 ## 13. Write-only native-composer allowlist
 
@@ -568,6 +578,10 @@ Authentication is not a reading surface, but it is also not part of the composer
 asocial can guarantee that reading surfaces are not rendered. It cannot guarantee X's application will not fetch timeline data. Blocking private requests would require broader permissions and a brittle dependency on X internals; do not implement it.
 
 ## 14. UI surfaces
+
+### Low-dopamine self-post actions
+
+The in-page compact action trigger/menu is the only asocial UI mounted into X content. It uses `textContent`, fixed extension strings, semantic buttons, and no React root or `innerHTML`. It is created only for a known self post, delegates actions to current native X controls, and contains no post text or identifiers.
 
 ### Popup
 
@@ -639,13 +653,13 @@ Add a background service worker only if a later requirement cannot be met by pop
 ### Controls
 
 - Run content code in Chrome's isolated world.
-- Render extension UI strings with React escaping, never `innerHTML` from X.
+- Render extension strings with `textContent` or React escaping; never use `innerHTML` from X.
 - Keep all executable code in the extension package.
 - Use no `eval`, remote scripts, analytics SDKs, telemetry, tracking pixels, or remote configuration.
 - Use no network request APIs in product code.
 - Store only normalized global settings locally.
 - Keep detected handles in content-script memory only and omit them from messages/logs.
-- Restore every patched X attribute on Normal transition.
+- Restore every patched X attribute and remove every inserted node/annotation on Normal transition.
 - Avoid logging content or identifiers in development helpers and tests.
 - Inspect built permissions and remote-code absence in CI.
 - Publish through a protected GitHub environment with manual approval and least-privilege store secrets.

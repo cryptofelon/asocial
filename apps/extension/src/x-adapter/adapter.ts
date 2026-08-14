@@ -1,6 +1,7 @@
 import type { SettingsV1 } from "../settings/model";
 import { PatchLedger } from "../runtime/patch-ledger";
 import { detectActiveAccount } from "./active-account";
+import { removeCompactActionMenus } from "./compact-actions";
 import { classifyRoute, type XRoute } from "./routes";
 import {
   annotateAttentionSurfaces,
@@ -74,6 +75,7 @@ export class XAdapter {
 
   reset(): void {
     this.#ledger.restoreAll();
+    removeCompactActionMenus(this.#document);
     this.#accountSignature = "";
     const selector = ANNOTATION_ATTRIBUTES.map((attribute) => `[${attribute}]`).join(",");
     this.#document.querySelectorAll(selector).forEach((element) => {

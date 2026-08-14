@@ -2,6 +2,7 @@ import type { SettingsV1 } from "../settings/model";
 import type { PatchLedger } from "../runtime/patch-ledger";
 import type { ActiveAccount } from "./active-account";
 import { classifyPostOwnership, type Ownership } from "./ownership";
+import { syncCompactActionMenu } from "./compact-actions";
 import { handleFromHref } from "./routes";
 
 const ACTION_LABEL_BY_TEST_ID: Readonly<Record<string, string>> = {
@@ -53,15 +54,20 @@ export function annotatePosts(
   settings: SettingsV1,
   ledger: PatchLedger,
 ): number {
-  let count = 0;
+  const articles = new Set<HTMLElement>();
+  const containingArticle = root.closest<HTMLElement>('article[data-testid="tweet"]');
+  if (containingArticle) articles.add(containingArticle);
   forEachMatch(root, 'article[data-testid="tweet"]', (element) => {
-    const article = element as HTMLElement;
+    articles.add(element as HTMLElement);
+  });
+
+  for (const article of articles) {
     const ownership = classifyPostOwnership(article, activeAccount);
     const hideMetrics = settings.metricScope === "all" || ownership !== "other";
     annotateActionMetrics(article, ownership, hideMetrics, ledger);
-    count += 1;
-  });
-  return count;
+    syncCompactActionMenu(article, settings.mode === "low-dopamine" && ownership === "self");
+  }
+  return articles.size;
 }
 
 export function annotateProfileMetrics(root: Element, activeAccount: ActiveAccount): number {

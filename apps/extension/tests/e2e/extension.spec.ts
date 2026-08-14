@@ -33,15 +33,31 @@ function fixtureHtml(includeComposer = false): string {
         <a id="followers" href="/alpha_user/followers">20 Followers</a>
         <article id="self-post" data-testid="tweet">
           <div data-testid="User-Name"><a href="/alpha_user">Alpha</a></div>
-          <button data-testid="like" aria-label="7 Likes. Like">
-            Like <span data-testid="app-text-transition-container">7</span>
-          </button>
+          <div id="self-actions" role="group" aria-label="Post actions">
+            <div><button data-testid="reply">Reply</button></div>
+            <div><button data-testid="retweet">Repost</button></div>
+            <div>
+              <button data-testid="like" aria-label="7 Likes. Like">
+                Like <span data-testid="app-text-transition-container">7</span>
+              </button>
+            </div>
+            <div><a href="/alpha_user/status/1/analytics">Analytics</a></div>
+            <div><button data-testid="bookmark">Bookmark</button></div>
+            <div><button data-testid="share">Share</button></div>
+          </div>
         </article>
         <article id="other-post" data-testid="tweet">
           <div data-testid="User-Name"><a href="/other_user">Other</a></div>
-          <button data-testid="like" aria-label="9 Likes. Like">
-            Like <span data-testid="app-text-transition-container">9</span>
-          </button>
+          <div id="other-actions" role="group" aria-label="Post actions">
+            <div><button data-testid="reply">Reply</button></div>
+            <div><button data-testid="retweet">Repost</button></div>
+            <div>
+              <button data-testid="like" aria-label="9 Likes. Like">
+                Like <span data-testid="app-text-transition-container">9</span>
+              </button>
+            </div>
+            <div><button data-testid="share">Share</button></div>
+          </div>
         </article>
         <section data-testid="trend">Trending topic</section>
         <aside><div data-testid="UserCell">Suggested account</div></aside>
@@ -169,16 +185,51 @@ test("applies and restores real extension modes in isolated Brave", async () => 
       Number(await computed(xPage, '[data-asocial-badge="notifications"]', "opacity")),
     ).toBeLessThan(1);
 
-    await xPage.locator("#self-post [data-testid=like]").evaluate((button) => {
+    const selfActionCells = xPage.locator("#self-actions > [data-asocial-native-action-cell]");
+    await expect(selfActionCells).toHaveCount(6);
+    expect(
+      await computed(
+        xPage,
+        "#self-actions > [data-asocial-native-action-cell]:first-child",
+        "display",
+      ),
+    ).toBe("none");
+    expect(await computed(xPage, "#other-actions > div:first-child", "display")).not.toBe("none");
+
+    const nativeReply = xPage.locator('#self-post [data-testid="reply"]');
+    await nativeReply.evaluate((button) => {
       button.addEventListener("click", () => {
         (button as HTMLElement).dataset.clicked = "true";
       });
     });
-    await xPage.locator("#self-post [data-testid=like]").click();
-    await expect(xPage.locator("#self-post [data-testid=like]")).toHaveAttribute(
-      "data-clicked",
-      "true",
-    );
+    const actionTrigger = xPage.getByRole("button", { name: "asocial post actions" });
+    const actionMenu = xPage.getByRole("menu");
+    await actionTrigger.click();
+    await expect(actionMenu).toBeVisible();
+    await expect(actionMenu.getByRole("menuitem")).toHaveCount(5);
+    await expect(actionMenu.getByRole("menuitem", { name: "View analytics" })).toBeVisible();
+    await expect(actionMenu.getByRole("menuitem", { name: /like/i })).toHaveCount(0);
+    await actionMenu.getByRole("menuitem", { name: "Reply" }).click();
+    await expect(nativeReply).toHaveAttribute("data-clicked", "true");
+    await expect(actionMenu).toBeHidden();
+
+    await actionTrigger.focus();
+    await actionTrigger.press("ArrowDown");
+    await expect(actionMenu.getByRole("menuitem", { name: "Reply" })).toBeFocused();
+    await actionMenu.getByRole("menuitem", { name: "Reply" }).press("ArrowDown");
+    await expect(actionMenu.getByRole("menuitem", { name: "Repost / quote" })).toBeFocused();
+    await actionMenu.getByRole("menuitem", { name: "Repost / quote" }).press("Escape");
+    await expect(actionMenu).toBeHidden();
+    await expect(actionTrigger).toBeFocused();
+
+    const otherLike = xPage.locator("#other-post [data-testid=like]");
+    await otherLike.evaluate((button) => {
+      button.addEventListener("click", () => {
+        (button as HTMLElement).dataset.clicked = "true";
+      });
+    });
+    await otherLike.click();
+    await expect(otherLike).toHaveAttribute("data-clicked", "true");
 
     await selectMode(popupPage, "write-only");
     await expect(xPage).toHaveURL("https://x.com/compose/post");
@@ -218,6 +269,9 @@ test("applies and restores real extension modes in isolated Brave", async () => 
       "aria-label",
       "7 Likes. Like",
     );
+    await expect(xPage.locator("[data-asocial-compact-actions]")).toHaveCount(0);
+    await expect(xPage.locator("[data-asocial-native-action-cell]")).toHaveCount(0);
+    expect(await computed(xPage, "#self-actions > div:first-child", "display")).not.toBe("none");
     expect(await computed(xPage, '[data-testid="trend"]', "display")).not.toBe("none");
   } finally {
     await context?.close();

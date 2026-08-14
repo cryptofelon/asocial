@@ -55,9 +55,9 @@ A user in write-only mode can reopen X, compose, attach media using X's own comp
 
 A user in low-dopamine mode cannot see their own numeric engagement or view metrics. Their Following and Followers summaries are hidden so posting decisions are not driven by social proof.
 
-### G3 — Preserve intentional actions
+### G3 — Preserve intentional actions without a scoreboard
 
-Hiding counts must not remove the reply, repost/quote, like, bookmark, follow, or share controls. X's existing repost control and quote-post menu remain intact.
+On a known active user's posts, one compact action menu replaces the native bottom row and forwards Reply, Repost / quote, View analytics, Bookmark, and Share to X's real controls. Like is intentionally omitted. Other users' native actions remain unchanged.
 
 ### G4 — Configurable calm
 
@@ -134,8 +134,11 @@ Low-dopamine keeps reading and interaction available while reducing feedback and
 - Hide numeric reply, repost, like, bookmark, and view metrics on the active user's posts.
 - Hide numeric summaries for those metrics on a focused post page.
 - Hide Following and Followers summary links on the active user's profile.
-- Preserve reply, repost/quote, like, bookmark, follow, and share controls.
-- Hide direct profile/post analytics entry points shown only to the post owner.
+- Replace the native bottom action row on a known active user's posts with one compact menu.
+- Expose Reply, Repost / quote, View analytics, Bookmark or Remove bookmark, and Share through that menu by forwarding to X's real controls.
+- Omit Like from the active user's compact menu.
+- Keep X's top-level More menu and other users' native action rows unchanged.
+- Hide direct profile analytics and analytics upsells by default; retain per-post analytics in the compact menu.
 - Keep Notifications, Mentions, and Messages navigation available.
 - Quiet Notifications and Messages by visually muting their unread badges; Hidden removes the badge, not the destination.
 - Hide trends and premium/analytics upsells by default. Leave recommended posts and account suggestions visible unless the user turns them off.
@@ -257,7 +260,7 @@ The user never enters, confirms, or manages X handles.
 | AS-009 | In Low-dopamine, classify posts as active-user, other-user, or unknown.                                                                                                                           |
 | AS-010 | Hide all listed numeric metrics for active-user posts.                                                                                                                                            |
 | AS-011 | Under signal disagreement or unknown ownership, hide metric numbers but retain action controls.                                                                                                   |
-| AS-012 | Preserve repost and quote-post access through X's existing combined control/menu.                                                                                                                 |
+| AS-012 | On known active-user posts, replace the native bottom action row with one accessible compact menu that proxies Reply, Repost / quote, View analytics, Bookmark, and Share to X; omit Like.        |
 | AS-013 | Support a global metric-hiding scope.                                                                                                                                                             |
 | AS-014 | Hide Following and Followers profile-summary links according to metric scope.                                                                                                                     |
 | AS-015 | Support Normal, Quiet, and Hidden notification badge states without removing navigation.                                                                                                          |
@@ -265,7 +268,7 @@ The user never enters, confirms, or manages X handles.
 | AS-017 | Support an independent, removable Mentions & replies shortcut.                                                                                                                                    |
 | AS-018 | Control trends, recommended posts, account suggestions, and combined premium/analytics prompts independently.                                                                                     |
 | AS-019 | Detect X SPA route/content changes without continuous polling or full-page rescans.                                                                                                               |
-| AS-020 | Keep extension control UI confined to the toolbar popup and options page, visually attributable to asocial, and keyboard accessible.                                                              |
+| AS-020 | Keep extension control UI in the toolbar popup and options page except for the accessible Low-dopamine self-post action trigger/menu; all extension UI must be visually attributable to asocial.  |
 | AS-021 | Store no post text, timeline content, handles, cookies, auth tokens, internal account IDs, or browsing history.                                                                                   |
 | AS-022 | Send no telemetry, analytics, user data, or remote configuration off-device.                                                                                                                      |
 | AS-023 | Provide user-visible degraded status and local selector self-tests containing mode, adapter version, active-account signal agreement, and unmatched rule IDs without post content or identifiers. |
@@ -292,7 +295,7 @@ The user never enters, confirms, or manages X handles.
 - Prefer semantic attributes, roles, link shapes, and route context over generated CSS class names.
 - Annotate stable containers with asocial-owned attributes; mode CSS consumes those attributes.
 - Process only added/changed subtrees and batch work; never rescan the full document on every mutation.
-- When a selector fails, preserve X action controls and hide uncertain numeric metrics.
+- If the compact menu cannot confidently identify a known self-post action group, leave X's native action controls intact and hide uncertain numeric metrics.
 - If write-only cannot safely identify an allowed surface, keep reading content masked, show degraded selector status, and provide a deliberate Normal-mode escape.
 
 ### Performance
@@ -336,7 +339,9 @@ The user never enters, confirms, or manages X handles.
 - If active-account signals disagree, all uncertain numeric metrics remain hidden.
 - On the active user's posts in home, profile, and focused-post contexts, reply, repost, like, bookmark, and view numbers are hidden.
 - Following and Followers summary links are absent from the visual and accessibility trees according to metric scope.
-- Reply, repost/quote, like, bookmark, follow, and share controls remain keyboard- and pointer-operable.
+- A known active user's native bottom action row is replaced by one keyboard- and pointer-operable menu containing Reply, Repost / quote, View analytics, Bookmark or Remove bookmark, and Share; Like is absent.
+- Activating a compact-menu item invokes X's current native control, so X retains ownership of composers, repost/quote menus, analytics pages, bookmark state, and share dialogs.
+- Other users' native action rows remain unchanged.
 - “All metrics” hides the same post and profile counts on other users' content.
 - Quiet notification/message badges remain available but visually muted.
 - Hidden notification/message badges are absent; their navigation links remain available.
