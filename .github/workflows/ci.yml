@@ -61,4 +61,5 @@ jobs:
             apps/extension/.output/*-chrome.zip
             chrome-extension.sha256
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 14
