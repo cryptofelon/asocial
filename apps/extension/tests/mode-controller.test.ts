@@ -43,7 +43,7 @@ describe("ModeController", () => {
     controller.dispose();
   });
 
-  it("mounts the journal and reveals only a validated native composer", async () => {
+  it("reveals only a validated native composer without mounting extension UI", async () => {
     window.history.replaceState(null, "", "/compose/post");
     document.body.innerHTML = `
       <div id="react-root">
@@ -54,20 +54,18 @@ describe("ModeController", () => {
     const controller = new ModeController(document);
     controller.apply({ ...DEFAULT_SETTINGS, mode: "write-only" });
 
-    const journal = document.querySelector<HTMLElement>("#asocial-root");
-    expect(journal?.shadowRoot?.textContent).toContain("Write without the scoreboard.");
+    expect(document.querySelector("#asocial-root")).toBeNull();
     expect(document.documentElement.dataset.asocialStartup).toBe("ready");
 
-    const dialog = document.createElement("div");
-    dialog.setAttribute("role", "dialog");
-    dialog.innerHTML = `
-      <div data-testid="tweetTextarea_0" contenteditable="true"></div>
-      <button data-testid="tweetButton">Post</button>
+    const composer = document.createElement("div");
+    composer.innerHTML = `
+      <section><div data-testid="tweetTextarea_0" contenteditable="true"></div></section>
+      <footer><button data-testid="tweetButton">Post</button></footer>
     `;
-    document.querySelector("#react-root")?.append(dialog);
+    document.querySelector("#react-root")?.append(composer);
 
     await vi.waitFor(() => {
-      expect(dialog.dataset.asocialAllowed).toBe("composer");
+      expect(composer.dataset.asocialAllowed).toBe("composer");
     });
 
     const accountMenu = document.createElement("div");
@@ -80,8 +78,7 @@ describe("ModeController", () => {
     });
 
     controller.apply({ ...DEFAULT_SETTINGS, mode: "normal" });
-    expect(document.querySelector("#asocial-root")).toBeNull();
-    expect(dialog.hasAttribute("data-asocial-allowed")).toBe(false);
+    expect(composer.hasAttribute("data-asocial-allowed")).toBe(false);
     expect(accountMenu.hasAttribute("data-asocial-allowed")).toBe(false);
     controller.dispose();
   });

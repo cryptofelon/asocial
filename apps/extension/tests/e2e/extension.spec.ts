@@ -12,7 +12,7 @@ declare const chrome: {
 const extensionPath = path.resolve(import.meta.dirname, "../../.output/chrome-mv3");
 const bravePath = "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser";
 
-function fixtureHtml(): string {
+function fixtureHtml(includeComposer = false): string {
   return `<!doctype html>
 <html lang="en">
   <head><meta charset="utf-8"><title>Synthetic X fixture</title></head>
@@ -47,6 +47,14 @@ function fixtureHtml(): string {
         <aside><div data-testid="UserCell">Suggested account</div></aside>
         <a href="/i/premium">Premium</a>
       </main>
+        ${
+          includeComposer
+            ? `<div id="native-composer">
+                 <section><div data-testid="tweetTextarea_0" contenteditable="true"></div></section>
+                 <footer><button data-testid="tweetButton">Post</button></footer>
+               </div>`
+            : ""
+        }
     </div>
   </body>
 </html>`;
@@ -107,7 +115,12 @@ test("applies and restores real extension modes in isolated Brave", async () => 
 
     await context.route("https://x.com/**", async (route) => {
       if (route.request().isNavigationRequest()) {
-        await route.fulfill({ status: 200, contentType: "text/html", body: fixtureHtml() });
+        const includeComposer = new URL(route.request().url()).pathname === "/compose/post";
+        await route.fulfill({
+          status: 200,
+          contentType: "text/html",
+          body: fixtureHtml(includeComposer),
+        });
       } else {
         await route.abort();
       }
@@ -119,6 +132,9 @@ test("applies and restores real extension modes in isolated Brave", async () => 
     await optionsPage.goto(`chrome-extension://${extensionId}/options.html`);
     await expect(optionsPage.getByRole("heading", { name: "Attention settings" })).toBeVisible();
 
+    const popupPage = await context.newPage();
+    await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
+    await expect(popupPage.locator("main")).toBeVisible();
     await selectMode(optionsPage, "low-dopamine");
     const xPage = await context.newPage();
     await xPage.goto("https://x.com/home");
@@ -164,33 +180,39 @@ test("applies and restores real extension modes in isolated Brave", async () => 
       "true",
     );
 
-    await selectMode(optionsPage, "write-only");
+    await selectMode(popupPage, "write-only");
+    await expect(xPage).toHaveURL("https://x.com/compose/post");
     await xPage.waitForFunction(
-      () => document.documentElement.dataset.asocialMode === "write-only",
+      () =>
+        document.documentElement.dataset.asocialMode === "write-only" &&
+        document.documentElement.dataset.asocialAdapter === "ready",
     );
-    await expect(xPage.locator("#asocial-root h1")).toHaveText("Write without the scoreboard.");
-    expect(await computed(xPage, "#react-root", "visibility")).toBe("hidden");
-
-    await xPage.locator("#react-root").evaluate((root) => {
-      const dialog = document.createElement("div");
-      dialog.id = "native-composer";
-      dialog.setAttribute("role", "dialog");
-      dialog.innerHTML = `
-        <div data-testid="tweetTextarea_0" contenteditable="true"></div>
-        <button data-testid="tweetButton">Post</button>
-      `;
-      root.append(dialog);
-    });
+    await expect(xPage.locator("#asocial-root")).toHaveCount(0);
     await expect(xPage.locator("#native-composer")).toHaveAttribute(
       "data-asocial-allowed",
       "composer",
     );
+    expect(await computed(xPage, "#react-root", "visibility")).toBe("hidden");
     expect(await computed(xPage, "#native-composer", "visibility")).toBe("visible");
-    await expect(xPage.locator('#native-composer [contenteditable="true"]')).toBeVisible();
 
-    await selectMode(optionsPage, "normal");
+    const editor = xPage.locator('#native-composer [contenteditable="true"]');
+    const submit = xPage.locator('#native-composer [data-testid="tweetButton"]');
+    await submit.evaluate((button) => {
+      button.addEventListener("click", () => {
+        (button as HTMLElement).dataset.clicked = "true";
+      });
+    });
+    await editor.fill("Journal entry");
+    await expect(editor).toHaveText("Journal entry");
+    await submit.click();
+    await expect(submit).toHaveAttribute("data-clicked", "true");
+
+    await selectMode(popupPage, "normal");
     await xPage.waitForFunction(() => !document.documentElement.hasAttribute("data-asocial-mode"));
-    await expect(xPage.locator("#asocial-root")).toHaveCount(0);
+    await expect(xPage.locator("#native-composer")).not.toHaveAttribute(
+      "data-asocial-allowed",
+      /.+/,
+    );
     await expect(xPage.locator("#self-post")).not.toHaveAttribute("data-asocial-owner", /.+/);
     await expect(xPage.locator("#self-post [data-testid=like]")).toHaveAttribute(
       "aria-label",

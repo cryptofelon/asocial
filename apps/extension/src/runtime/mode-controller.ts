@@ -1,4 +1,3 @@
-import { JournalShell } from "../journal-shell/mount";
 import { applyLowDopamineSettings } from "../modes/low-dopamine";
 import { clearPolicyState } from "../modes/normal";
 import { applyWriteOnlyAllowlist, clearWriteOnlyAllowlist } from "../modes/write-only";
@@ -11,17 +10,16 @@ import type { RuntimeStatus } from "./status";
 export class ModeController {
   readonly #document: Document;
   readonly #adapter: XAdapter;
-  readonly #journal: JournalShell;
   readonly #batcher: MutationBatcher;
   #observer: MutationObserver | undefined;
   #settings: SettingsV1 | undefined;
   #pathname = "";
   #composerTimer: ReturnType<typeof setTimeout> | undefined;
+  #composerNavigationRequested = false;
 
   constructor(document: Document) {
     this.#document = document;
     this.#adapter = new XAdapter(document);
-    this.#journal = new JournalShell(document);
     this.#batcher = new MutationBatcher((roots) => this.#processRoots(roots));
   }
   status(): RuntimeStatus {
@@ -44,10 +42,10 @@ export class ModeController {
     this.#pathname = this.#document.location.pathname;
     clearTimeout(this.#composerTimer);
     this.#composerTimer = undefined;
+    this.#composerNavigationRequested = false;
     this.#adapter.reset();
     clearWriteOnlyAllowlist(this.#document);
     clearPolicyState(this.#document.documentElement);
-    this.#journal.unmount();
 
     if (settings.mode === "normal") {
       this.#stopObserver();
@@ -75,7 +73,6 @@ export class ModeController {
     this.#document.documentElement.dataset.asocialStartup = "recovery";
     this.#document.documentElement.dataset.asocialMode = "write-only";
     this.#document.documentElement.dataset.asocialAdapter = "degraded";
-    this.#journal.showRecovery();
   }
 
   dispose(): void {
@@ -86,7 +83,6 @@ export class ModeController {
     this.#adapter.reset();
     clearWriteOnlyAllowlist(this.#document);
     clearPolicyState(this.#document.documentElement);
-    this.#journal.unmount();
   }
 
   #startObserver(): void {
@@ -140,24 +136,32 @@ export class ModeController {
     html.dataset.asocialRoute = route;
 
     if (route === "auth") {
-      this.#journal.unmount();
       html.dataset.asocialAdapter = "ready";
       clearTimeout(this.#composerTimer);
       this.#composerTimer = undefined;
       return;
     }
 
-    this.#journal.mount();
-    const status = applyWriteOnlyAllowlist(this.#document, roots);
-    html.dataset.asocialAdapter = "ready";
-    if (status.route !== "compose" || status.composerReady) {
+    if (route !== "compose") {
+      html.dataset.asocialAdapter = "ready";
       clearTimeout(this.#composerTimer);
       this.#composerTimer = undefined;
-      this.#journal.setStatus("Journal ready");
+      if (!this.#composerNavigationRequested) {
+        this.#composerNavigationRequested = true;
+        this.#document.location.assign("/compose/post");
+      }
       return;
     }
 
-    this.#journal.setStatus("Waiting for X composer…");
+    this.#composerNavigationRequested = false;
+    const status = applyWriteOnlyAllowlist(this.#document, roots);
+    html.dataset.asocialAdapter = "ready";
+    if (status.composerReady) {
+      clearTimeout(this.#composerTimer);
+      this.#composerTimer = undefined;
+      return;
+    }
+
     if (this.#composerTimer) return;
     this.#composerTimer = setTimeout(() => {
       this.#composerTimer = undefined;
@@ -166,7 +170,6 @@ export class ModeController {
         !this.#document.querySelector('[data-asocial-allowed="composer"]')
       ) {
         html.dataset.asocialAdapter = "degraded";
-        this.#journal.setStatus("Composer unavailable; use Settings to escape", true);
       }
     }, 2500);
   }

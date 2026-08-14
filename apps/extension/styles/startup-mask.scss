@@ -1,23 +1,14 @@
 html:not([data-asocial-startup="ready"]) {
   background: Canvas;
 
-  body > :not(#asocial-root) {
+  body > * {
     visibility: hidden !important;
     pointer-events: none !important;
   }
 }
 
-html body > #asocial-root {
-  display: none;
-}
-
-html[data-asocial-mode="write-only"] body > #asocial-root,
-html[data-asocial-startup="recovery"] body > #asocial-root {
-  display: block;
-}
-
 html[data-asocial-mode="write-only"]:not([data-asocial-route="auth"]) {
-  body > :not(#asocial-root) {
+  body > * {
     visibility: hidden !important;
     pointer-events: none !important;
   }

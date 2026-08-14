@@ -165,11 +165,10 @@ Changing these settings does not alter write-only's stricter guarantees.
 
 ### 8.3 Write-only
 
-Write-only is the persistent journal mode. It must not depend on fragile per-component hiding. The extension owns a simple journal shell and reveals only narrowly classified native X controls.
+Write-only is the persistent journal mode. It must not depend on fragile per-component hiding. It navigates directly to X's native composer and reveals only narrowly classified native X controls; it injects no asocial page or dashboard.
 
 #### Allowed surfaces
 
-- asocial's journal shell.
 - X's native post composer and its necessary descendants:
   - text editor;
   - media attachment and preview;
@@ -194,14 +193,12 @@ Write-only is the persistent journal mode. It must not depend on fragile per-com
 #### Persistence and navigation
 
 - `chrome.storage.local` persists write-only across tab closure and browser restart.
-- Opening `x.com` while write-only is persisted applies the startup mask before X content can paint, then shows the journal shell.
-- “Write on X” opens X's native `/compose/post` flow inside the masked page.
+- Opening `x.com` while write-only is persisted applies the startup mask before X content can paint, then navigates directly to X's native `/compose/post` flow.
 - Publishing, adding another post to a native thread, replying to the user's own thread, or closing the composer keeps write-only active.
-- After composer completion or closure, return to the journal shell; never fall through to Low-dopamine or Normal automatically.
-- Direct navigation to a reading route remains masked and returns to the shell. asocial does not erase browser history.
+- After composer completion or closure, remain in Write-only and return to `/compose/post`; never fall through to Low-dopamine or Normal automatically.
+- Direct navigation to a reading route remains masked and returns to `/compose/post`. asocial does not erase browser history.
 - Account switching occurs through X's native switcher when it can be isolated safely. During a switch, all metrics remain hidden until active-account signals agree.
-- A visible toolbar action can switch to another mode at any time.
-- The shell displays a concise reminder: “Your post uses your X audience settings.”
+- The toolbar popup can switch to another mode at any time.
 
 #### Fetching boundary
 
@@ -223,11 +220,11 @@ The user never enters, confirms, or manages X handles.
 1. User selects Write-only from the toolbar popup.
 2. The mode is persisted before the current X tab is revealed.
 3. Any open X tab is masked before mode-specific content is exposed.
-4. User chooses “Write on X.”
-5. X's composer appears with no readable timeline behind it.
+4. The current X tab navigates directly to `/compose/post`.
+5. X's native composer appears with no readable timeline behind it.
 6. User publishes one post, uses X's native multi-post thread control, or continues a reliably classified self-thread.
-7. The composer closes and asocial returns to its journal shell with Write-only still active.
-8. Closing and reopening X returns directly to the masked journal experience.
+7. Write-only remains active and navigation away from the composer returns to `/compose/post`.
+8. Closing and reopening X returns directly to the masked native composer.
 
 ### 9.3 Intentional browsing
 
@@ -268,13 +265,13 @@ The user never enters, confirms, or manages X handles.
 | AS-017 | Support an independent, removable Mentions & replies shortcut.                                                                                                                                    |
 | AS-018 | Control trends, recommended posts, account suggestions, and combined premium/analytics prompts independently.                                                                                     |
 | AS-019 | Detect X SPA route/content changes without continuous polling or full-page rescans.                                                                                                               |
-| AS-020 | Keep extension-injected UI visually attributable to asocial and accessible by keyboard.                                                                                                           |
+| AS-020 | Keep extension control UI confined to the toolbar popup and options page, visually attributable to asocial, and keyboard accessible.                                                              |
 | AS-021 | Store no post text, timeline content, handles, cookies, auth tokens, internal account IDs, or browsing history.                                                                                   |
 | AS-022 | Send no telemetry, analytics, user data, or remote configuration off-device.                                                                                                                      |
 | AS-023 | Provide user-visible degraded status and local selector self-tests containing mode, adapter version, active-account signal agreement, and unmatched rule IDs without post content or identifiers. |
 | AS-024 | Keep Write-only active after publishing, closing the composer, native multi-post composition, and supported self-thread replies.                                                                  |
 | AS-025 | Expose X's native account switcher in Write-only only when its button and portal menu pass the strict allowlist contract.                                                                         |
-| AS-026 | Keep X masked by manifest-declared static CSS until the selected mode's first safe state is complete; startup failure must reveal only an asocial recovery shell.                                 |
+| AS-026 | Keep X masked by manifest-declared static CSS until the selected mode's first safe state is complete; startup failure must keep X masked with the toolbar popup as the Normal-mode escape.        |
 
 ## 11. Non-functional requirements
 
@@ -349,15 +346,15 @@ The user never enters, confirms, or manages X handles.
 ### Write-only
 
 - After Write-only is selected, closing every X tab or restarting Chrome and reopening `x.com` does not reveal a readable X frame.
-- A navigation-start filmstrip does not show a readable timeline before the journal shell or composer mask applies.
+- A navigation-start filmstrip does not show a readable timeline before the composer mask applies.
 - Opening home, profile, post, search, notifications, or messages routes never reveals their content.
 - The native composer can publish text and media and create a native multi-post thread using the user's existing X session.
-- Publishing or closing the composer returns to the journal shell and Write-only remains persisted.
+- Publishing or closing the composer keeps Write-only persisted and returns to `/compose/post`.
 - A supported self-thread reply flow exposes only the minimum self-authored context and native reply composer.
 - The native account-switcher button and portal menu can switch accounts without revealing timelines, badges, or unrelated navigation.
 - During account switching, active-account disagreement exposes no self-specific metrics.
 - If composer or account-switcher detection fails, X remains masked and a Normal-mode recovery path remains available.
-- Required-rule failure is visible in the recovery shell and popup, and the local selector self-test contains no content or handles.
+- Required-rule failure is visible in the popup, and the local selector self-test contains no content or handles.
 
 ### Privacy and performance
 
@@ -382,22 +379,22 @@ MVP success is product correctness, not engagement growth:
 
 ## 14. Risks and mitigations
 
-| Risk                                                 | Consequence                                     | Mitigation                                                                                                                     |
-| ---------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| X changes DOM structure                              | Hidden content leaks or controls disappear      | Central adapter, fixture contracts, manual route matrix, local selector-health diagnostics                                     |
-| Async settings or JavaScript startup delay           | User sees the feed or metrics                   | Manifest-declared static CSS masks by default without a JavaScript marker; apply persisted mode before setting `ready`         |
-| Startup code fails before mode loads                 | X could remain inaccessible                     | Fail-closed recovery shell; toolbar popup and extension disable remain deliberate escape paths                                 |
-| Fail-closed behavior hides X after an adapter change | User cannot use the restricted surface          | Recovery shell, user-visible degraded status, local selector self-test, deliberate Normal escape, and extension-disable escape |
-| Write-only masking is too permissive                 | Reading content leaks                           | Default-deny shell; allowlist only validated composer, self-thread, authentication, and account-switcher surfaces              |
-| X still fetches timeline data                        | Unneeded network/computation may occur inside X | Do not claim request blocking; minimize asocial work and reject fragile private-request interception                           |
-| Metric styling removes controls                      | Core interactions break                         | Annotate/count spans separately; never hide the action container                                                               |
-| Current account is misidentified                     | Self metrics leak                               | Require profile-nav and account-switcher signals to agree; disagreement becomes unknown and hides numbers                      |
-| Native account switcher changes                      | Journal could reveal unrelated UI               | Strict button/menu contract, badge suppression, and fail-closed Normal escape                                                  |
-| “Journal” implies privacy                            | User overshares publicly                        | Repeat clear audience reminder in onboarding and write-only shell                                                              |
-| Aggregate notification badge cannot identify replies | Misleading reply-only behavior                  | Offer quiet/hidden badge and an independently removable Mentions shortcut; do not promise categorization                       |
-| Release automation leaks credentials                 | Store account compromise                        | Protected environments, least-privilege secrets, manual approval, and no secrets in fork workflows                             |
-| X terms or store policy changes                      | Distribution risk                               | Avoid APIs, automation, scraping, remote code, or data collection; review current terms before public release                  |
-| Turborepo adds overhead to one app                   | More configuration than value                   | Keep one extension package initially; add shared packages only with a real second consumer                                     |
+| Risk                                                 | Consequence                                     | Mitigation                                                                                                             |
+| ---------------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| X changes DOM structure                              | Hidden content leaks or controls disappear      | Central adapter, fixture contracts, manual route matrix, local selector-health diagnostics                             |
+| Async settings or JavaScript startup delay           | User sees the feed or metrics                   | Manifest-declared static CSS masks by default without a JavaScript marker; apply persisted mode before setting `ready` |
+| Startup code fails before mode loads                 | X could remain inaccessible                     | Keep X masked; toolbar popup and extension disable remain deliberate escape paths                                      |
+| Fail-closed behavior hides X after an adapter change | User cannot use the restricted surface          | Popup degraded status, local selector self-test, deliberate Normal escape, and extension-disable escape                |
+| Write-only masking is too permissive                 | Reading content leaks                           | Default-deny mask; allowlist only validated composer, self-thread, authentication, and account-switcher surfaces       |
+| X still fetches timeline data                        | Unneeded network/computation may occur inside X | Do not claim request blocking; minimize asocial work and reject fragile private-request interception                   |
+| Metric styling removes controls                      | Core interactions break                         | Annotate/count spans separately; never hide the action container                                                       |
+| Current account is misidentified                     | Self metrics leak                               | Require profile-nav and account-switcher signals to agree; disagreement becomes unknown and hides numbers              |
+| Native account switcher changes                      | Journal could reveal unrelated UI               | Strict button/menu contract, badge suppression, and fail-closed Normal escape                                          |
+| “Journal” implies privacy                            | User overshares publicly                        | Keep the audience reminder in the extension popup and options page, never as an overlay on X                           |
+| Aggregate notification badge cannot identify replies | Misleading reply-only behavior                  | Offer quiet/hidden badge and an independently removable Mentions shortcut; do not promise categorization               |
+| Release automation leaks credentials                 | Store account compromise                        | Protected environments, least-privilege secrets, manual approval, and no secrets in fork workflows                     |
+| X terms or store policy changes                      | Distribution risk                               | Avoid APIs, automation, scraping, remote code, or data collection; review current terms before public release          |
+| Turborepo adds overhead to one app                   | More configuration than value                   | Keep one extension package initially; add shared packages only with a real second consumer                             |
 
 ## 15. Delivery scope
 

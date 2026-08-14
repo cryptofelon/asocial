@@ -70,7 +70,7 @@ React is limited to four components:
 
 Two additional TSX files are mount-only entrypoints: `popup/main.tsx` and `options/main.tsx`. The initial design therefore has exactly **six TSX files**, of which **four are React components**.
 
-The content script is latency- and mutation-sensitive. It uses DOM APIs, a small controller, and compiled policy styles directly. The journal shell remains vanilla TypeScript in a Shadow Root. Do not mount React over X or represent X content in React state.
+The content script is latency- and mutation-sensitive. It uses DOM APIs, a small controller, and compiled policy styles directly. It never mounts an extension-owned product surface over X or represents X content in React state.
 
 ### 3.3 SCSS, CSS Modules, and styletyper
 
@@ -78,7 +78,7 @@ The content script is latency- and mutation-sensitive. It uses DOM APIs, a small
 
 Use two styling boundaries:
 
-- **Global non-module SCSS:** `startup-mask.scss`, `x-policies.scss`, and `journal-shell.scss`. The first two intentionally target `html[data-asocial-*]`, extension-owned DOM annotations, and stable X surface boundaries. The journal stylesheet is injected as text into a Shadow Root, so a hashed class map would provide no useful boundary.
+- **Global non-module SCSS:** `startup-mask.scss` and `x-policies.scss`. They intentionally target `html[data-asocial-*]`, extension-owned DOM annotations, and stable X surface boundaries.
 - **Typed SCSS Modules:** popup, options, and shared React controls. These styles belong to React elements asocial creates, so imported class maps are the correct boundary.
 
 For a Vite application, install **only** `vite-plugin-styletyper`; it already depends on and uses the `styletyper` engine. Do not add `styletyper` as a second direct dependency. Install the SCSS implementation separately for Vite:
@@ -97,17 +97,16 @@ WXT orchestrates multiple Vite builds for extension entrypoint groups. Integrati
 
 Initial style inventory:
 
-| Style                       | Kind                                                           | Importer                 |
-| --------------------------- | -------------------------------------------------------------- | ------------------------ |
-| `popup.module.scss`         | typed module                                                   | `Popup.tsx`              |
-| `options.module.scss`       | typed module                                                   | `Options.tsx`            |
-| `mode-picker.module.scss`   | typed module                                                   | `ModePicker.tsx`         |
-| `settings-form.module.scss` | typed module                                                   | `SettingsForm.tsx`       |
-| `journal-shell.scss`        | global class names, injected only into the journal Shadow Root | `journal-shell/mount.ts` |
-| `startup-mask.scss`         | global static content style                                    | `entrypoints/content.ts` |
-| `x-policies.scss`           | global content policy style                                    | `entrypoints/content.ts` |
+| Style                       | Kind                        | Importer                 |
+| --------------------------- | --------------------------- | ------------------------ |
+| `popup.module.scss`         | typed module                | `Popup.tsx`              |
+| `options.module.scss`       | typed module                | `Options.tsx`            |
+| `mode-picker.module.scss`   | typed module                | `ModePicker.tsx`         |
+| `settings-form.module.scss` | typed module                | `SettingsForm.tsx`       |
+| `startup-mask.scss`         | global static content style | `entrypoints/content.ts` |
+| `x-policies.scss`           | global content policy style | `entrypoints/content.ts` |
 
-That is **four SCSS Modules plus three non-module SCSS files**. Exactly **six source files import styles**; `content.ts` imports both page-level global files. Do not split styles further until a component or loading boundary requires it.
+That is **four SCSS Modules plus two non-module SCSS files**. Exactly **five source files import styles**; `content.ts` imports both page-level global files. Do not split styles further until a component or loading boundary requires it.
 
 ### 3.4 pnpm workspace and Turborepo
 
@@ -160,9 +159,6 @@ asocial/
 │       │   │   ├── routes.ts
 │       │   │   ├── rules.ts
 │       │   │   └── surfaces.ts
-│       │   ├── journal-shell/
-│       │   │   ├── mount.ts
-│       │   │   └── journal-shell.scss
 │       │   └── ui/
 │       │       ├── ModePicker.tsx
 │       │       ├── mode-picker.module.scss
@@ -206,8 +202,7 @@ flowchart LR
   Controller --> Low[Low-dopamine policy]
   Controller --> Write[Write-only policy]
   Low -->|compiled SCSS + reversible patches| X
-  Write --> Shell[asocial journal shell]
-  Write -->|allowlist composer and account switcher| X
+  Write -->|navigate to and allowlist native composer| X
   X -->|user clicks native Post| XService[X service]
 ```
 
@@ -306,31 +301,28 @@ Normalization rules:
 
 1. WXT compiles `startup-mask.scss` to a statically declared content stylesheet. The built manifest must list the compiled file in `content_scripts[].css` with `run_at: "document_start"`.
 2. The static stylesheet masks X **without requiring a JavaScript-added marker**.
-3. At `document_start`, the first content-script statements schedule a recovery-shell timeout and read normalized global settings from `chrome.storage.local`.
+3. At `document_start`, the first content-script statements schedule a fail-closed recovery timeout and read normalized global settings from `chrome.storage.local`.
 4. Apply the stored mode:
    - Normal: prepare no policy or observer.
    - Low-dopamine: classify active identity and required existing surfaces, then apply policy.
-   - Write-only: mount the journal shell and install the default-deny structural policy.
+   - Write-only: install the default-deny policy and navigate non-authentication routes directly to X's `/compose/post` route.
 5. Set `data-asocial-startup="ready"` only after the selected mode's first safe state is complete.
 6. Cancel the recovery timeout.
 
 Conceptual SCSS:
 
 ```scss
-html:not([data-asocial-startup="ready"]) body > :not(#asocial-root) {
+html:not([data-asocial-startup="ready"]) body > * {
   visibility: hidden !important;
-}
-
-#asocial-root {
-  visibility: visible !important;
+  pointer-events: none !important;
 }
 ```
 
-The absence of `ready` is the safe state. If JavaScript is delayed, X remains masked. If storage or startup fails, the timeout mounts an asocial-owned recovery shell while X remains masked. The shell and toolbar popup show a degraded-state message, expose selector/self-test status, and provide a deliberate Normal-mode escape. Disabling the extension always removes its static styles.
+The absence of `ready` is the safe state. If JavaScript is delayed or startup fails, X remains masked. The toolbar popup exposes degraded status and a deliberate Normal-mode escape; disabling the extension always removes its static styles. No recovery dashboard is injected into X.
 
 The term **Write-only** describes the X user experience, not storage semantics. `chrome.storage.local` is intentionally read/write: mode changes are written, and the mode is read on every X document start. It persists Write-only across tab closure, browser restart, and extension update.
 
-The initial `visibility` curtain is the same default-deny mechanism used by Write-only. Hidden X roots retain no paint, pointer access, or accessibility exposure; explicitly allowlisted native dialogs override `visibility` and pointer handling without requiring brittle ancestor rewrites. The fixed journal shell covers retained layout.
+The initial `visibility` curtain is the same default-deny mechanism used by Write-only. Hidden X roots retain no paint, pointer access, or accessibility exposure; a complete validated native composer overrides `visibility` and pointer handling without requiring brittle ancestor rewrites.
 
 Test the built unpacked extension—not a source approximation—with cache disabled and CPU/network throttling. Cover cold tab open, browser restart, extension update, slow storage, and injected startup failure using Chrome navigation filmstrips. “No flash” is a measured release invariant.
 
@@ -342,7 +334,7 @@ Test the built unpacked extension—not a source approximation—with cache disa
 2. stop the previous mode;
 3. disconnect its observer;
 4. restore reversible attribute patches;
-5. remove asocial annotations and shell UI;
+5. remove asocial annotations;
 6. apply the next mode's first safe state;
 7. start only the observer needed by that mode.
 
@@ -365,12 +357,12 @@ Test the built unpacked extension—not a source approximation—with cache disa
 ### Write-only
 
 - Set the default-deny page mask before processing X content.
-- Mount the journal shell in an extension-owned Shadow Root.
+- Navigate any supported reading route directly to X's native `/compose/post` route.
 - Do not scan or annotate timeline posts.
-- Observe only route, native composer, self-thread continuation, authentication, and account-switcher boundaries.
-- Mark only complete allowlisted subtrees as visible.
-- Keep all other X content absent from layout, paint, pointer input, and the accessibility tree.
-- When a composer closes, remove its allowlist annotation and retain the shell and Write-only mode.
+- Observe only route, native composer, authentication, and account-switcher boundaries.
+- Mark only a complete validated composer subtree as visible.
+- Keep all other X content absent from paint, pointer input, and the accessibility tree.
+- When a composer closes or submission navigates elsewhere, retain Write-only and return to `/compose/post`.
 
 The controller is idempotent. Applying the same settings twice must not duplicate observers, roots, styles, or annotations.
 
@@ -516,38 +508,30 @@ If X places a count in an action's `aria-label`, visually hiding a child span is
 
 The live-DOM implementation spike must inspect this behavior before declaring accessibility acceptance complete.
 
-## 13. Write-only shell and native-control allowlist
+## 13. Write-only native-composer allowlist
 
-Write-only is persistent and default-deny.
-
-### Shell
-
-- Add one fixed `#asocial-root` sibling under `body`.
-- Attach a Shadow Root so X styles cannot accidentally restyle the shell.
-- Inject `journal-shell.scss` as text inside that Shadow Root; use stable local class names because X cannot address through the shadow boundary.
-- Include product name, “Write on X,” the audience reminder, in-memory active-account status, and a recovery link that opens extension settings.
-- Keep mode switching in the extension toolbar/options surface; do not imitate X navigation.
+Write-only is persistent and default-deny. It adds no asocial page, card, dashboard, text editor, or in-page settings control.
 
 ### Page mask
 
-The startup mask initially hides the page before classification. Once Write-only is known, structurally remove all X roots except complete allowlisted surfaces. The final state must remove disallowed content from layout, paint, pointer input, and the accessibility tree.
+The startup mask initially hides the page before classification. Once Write-only is known, all X roots remain masked except a complete allowlisted native composer. Disallowed content has no paint, pointer input, or accessibility exposure.
 
 Do not build an asocial text area and copy its content into X. That creates draft custody, synchronization, and accidental-posting risks.
 
 ### Opening and completing the composer
 
-“Write on X” is an explicit user action. It may navigate the current X tab to X's published `/compose/post` route. X remains responsible for rendering, validation, media, audience controls, native multi-post thread controls, and submission.
+Selecting Write-only immediately navigates the current X tab to X's published `/compose/post` route. X remains responsible for rendering, validation, media, audience controls, native multi-post thread controls, and submission.
 
 A composer rule must match at least:
 
 - editable input;
 - native submit button;
-- enclosing dialog/region;
+- their narrowest common container, preferring an enclosing dialog;
 - close/cancel path.
 
-If the complete contract is not met, reveal none of the candidate subtree. Show “X's composer could not be identified; switch to Normal to continue.”
+If the complete contract is not met, reveal none of the candidate subtree and set local adapter status to `degraded`. The toolbar popup remains the Normal-mode escape.
 
-Detect composer closure by removal of the allowlisted root, not by inspecting the network request or post text. Posting, cancellation, and native multi-post completion all return to the journal shell with Write-only still persisted.
+Detect composer closure by removal of the allowlisted root, not by inspecting the network request or post text. Posting, cancellation, and native multi-post completion keep Write-only persisted; navigation away from the composer returns to `/compose/post`.
 
 ### Self-thread continuation
 
@@ -638,7 +622,7 @@ type RuntimeStatus = {
 };
 ```
 
-The recovery shell and popup surface degraded status locally. The response contains no DOM text, handles, URLs, account IDs, post identifiers, or browsing history.
+The popup surfaces degraded status locally. The response contains no DOM text, handles, URLs, account IDs, post identifiers, or browsing history.
 
 Add a background service worker only if a later requirement cannot be met by popup/options/content contexts—for example, a browser command that must work with no X tab loaded. Release automation is external CI and does not justify runtime background code.
 
@@ -655,7 +639,7 @@ Add a background service worker only if a later requirement cannot be met by pop
 ### Controls
 
 - Run content code in Chrome's isolated world.
-- Render shell strings with DOM text nodes/React escaping, never `innerHTML` from X.
+- Render extension UI strings with React escaping, never `innerHTML` from X.
 - Keep all executable code in the extension package.
 - Use no `eval`, remote scripts, analytics SDKs, telemetry, tracking pixels, or remote configuration.
 - Use no network request APIs in product code.
@@ -687,7 +671,6 @@ A public Chrome Web Store release still needs an accurate privacy policy and dis
 - verify repeated/concurrent WXT entrypoint builds are idempotent and race-free;
 - verify generated declarations/maps are untracked and absent from the package;
 - verify `startup-mask.scss` and `x-policies.scss` compile to manifest-declared static CSS;
-- verify journal-shell styles are injected inside its Shadow Root.
 
 ### DOM adapter contract tests
 
@@ -719,11 +702,11 @@ Run a built unpacked extension in Chromium against synthetic pages to verify:
 
 - manifest and static style injection;
 - cold-start, reopen, restart, slow-storage, and extension-update masking;
-- startup failure produces a recovery shell without revealing X;
+- startup failure keeps X masked and leaves the toolbar popup as the escape;
 - cross-context storage propagation;
 - popup/options state;
 - exact Normal cleanup;
-- Shadow Root shell isolation;
+- native composer typing and submit interaction through the real unpacked extension;
 - no extension-originated network requests;
 - no timeline-post annotation in Write-only;
 - built permission allowlist.
@@ -847,11 +830,11 @@ Technically preferable for one package, but not selected because the requested p
 1. Scaffold the sparse pnpm/Turbo/WXT repository and pin the toolchain.
 2. Integrate `sass-embedded` and `vite-plugin-styletyper` only; prove clean-checkout WXT generation, declaration assertions, standalone type-checking, concurrent entrypoint safety, and production CSS output.
 3. Implement global settings normalization/repository and the three-mode popup.
-4. Implement the static startup mask, fail-closed recovery shell, mode controller, cleanup, and cross-tab/restart propagation against synthetic pages.
+4. Implement the static startup mask, fail-closed recovery state, mode controller, cleanup, and cross-tab/restart propagation against synthetic pages.
 5. Spike current live X active-account and account-switcher DOM surfaces; document the smallest semantic contracts.
 6. Implement low-dopamine identity/ownership and metric annotations; prove controls remain operable.
 7. Implement independent notification, message, Mentions, trend, recommended-post, account-suggestion, and prompt rules.
-8. Implement the persistent Write-only shell, strict native-composer allowlist, native multi-post flow, and account-switcher allowlist.
+8. Implement persistent Write-only navigation, the strict native-composer allowlist, native multi-post flow, and account-switcher allowlist.
 9. Add self-thread continuation only after its minimal context can be isolated safely.
 10. Run the authenticated route/performance matrix and repair selector, accessibility, and flash gaps.
 11. Package a private Chrome/Brave build.

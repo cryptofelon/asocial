@@ -1,4 +1,18 @@
 import { classifyRoute, type XRoute } from "../x-adapter/routes";
+const EDITOR_SELECTOR = '[data-testid^="tweetTextarea_"]';
+const SUBMIT_SELECTOR = '[data-testid="tweetButton"], [data-testid="tweetButtonInline"]';
+
+function findComposerContainer(editor: HTMLElement, document: Document): HTMLElement | undefined {
+  const dialog = editor.closest<HTMLElement>('[role="dialog"]');
+  if (dialog?.querySelector(SUBMIT_SELECTOR)) return dialog;
+
+  let candidate = editor.parentElement;
+  while (candidate && candidate !== document.body) {
+    if (candidate.querySelector(SUBMIT_SELECTOR)) return candidate;
+    candidate = candidate.parentElement;
+  }
+  return undefined;
+}
 
 function forEachMatch(
   root: Element,
@@ -19,15 +33,15 @@ export function applyWriteOnlyAllowlist(
   document: Document,
   roots: readonly Element[],
 ): WriteOnlyStatus {
-  for (const root of roots) {
-    forEachMatch(root, '[role="dialog"]', (dialog) => {
-      const hasEditor = Boolean(dialog.querySelector('[data-testid="tweetTextarea_0"]'));
-      const hasSubmit = Boolean(
-        dialog.querySelector('[data-testid="tweetButton"], [data-testid="tweetButtonInline"]'),
-      );
-      if (hasEditor && hasSubmit) dialog.dataset.asocialAllowed = "composer";
-    });
+  document
+    .querySelectorAll<HTMLElement>('[data-asocial-allowed="composer"]')
+    .forEach((element) => element.removeAttribute("data-asocial-allowed"));
+  document.querySelectorAll<HTMLElement>(EDITOR_SELECTOR).forEach((editor) => {
+    const composer = findComposerContainer(editor, document);
+    if (composer) composer.dataset.asocialAllowed = "composer";
+  });
 
+  for (const root of roots) {
     forEachMatch(root, '[data-testid="Dropdown"], [role="menu"]', (menu) => {
       const hasAccountAction = Boolean(
         menu.querySelector(
