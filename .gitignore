@@ -1,0 +1,8 @@
+node_modules/
+.turbo/
+.output/
+.wxt/
+coverage/
+*.module.*.d.ts
+*.module.*.d.ts.map
+.DS_Store

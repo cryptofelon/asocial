@@ -1,0 +1,23 @@
+{
+  "name": "asocial",
+  "private": true,
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "check": "turbo run check",
+    "test": "turbo run test",
+    "lint": "oxlint .",
+    "zip": "turbo run zip",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check ."
+  },
+  "devDependencies": {
+    "oxfmt": "0.63.0",
+    "oxlint": "1.78.0",
+    "turbo": "2.10.9"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@11.21.0"
+}

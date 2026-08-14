@@ -53,7 +53,7 @@ A user in write-only mode can reopen X, compose, attach media using X's own comp
 
 ### G2 — Remove self-evaluation loops
 
-A user in low-dopamine mode cannot see their own numeric engagement or view metrics. Profile relationship summaries are hidden entirely so following decisions can be based on content rather than social proof.
+A user in low-dopamine mode cannot see their own numeric engagement or view metrics. Their Following and Followers summaries are hidden so posting decisions are not driven by social proof.
 
 ### G3 — Preserve intentional actions
 
@@ -131,15 +131,14 @@ Low-dopamine keeps reading and interaction available while reducing feedback and
 #### Required default behavior
 
 - Detect the active X account automatically from the current page; do not ask for or persist handles.
-- Hide the active user's total post count where X shows it as a profile/header metric.
 - Hide numeric reply, repost, like, bookmark, and view metrics on the active user's posts.
 - Hide numeric summaries for those metrics on a focused post page.
-- Hide Following and Followers summary links entirely on profiles.
+- Hide Following and Followers summary links on the active user's profile.
 - Preserve reply, repost/quote, like, bookmark, follow, and share controls.
 - Hide direct profile/post analytics entry points shown only to the post owner.
-- Keep Notifications, Mentions, and Messages navigation available by default.
-- Quiet Notifications and Messages by hiding their unread dots/counts by default.
-- Hide trends, recommended posts, account suggestions, and premium/analytics upsells by default.
+- Keep Notifications, Mentions, and Messages navigation available.
+- Quiet Notifications and Messages by visually muting their unread badges; Hidden removes the badge, not the destination.
+- Hide trends and premium/analytics upsells by default. Leave recommended posts and account suggestions visible unless the user turns them off.
 - Do not otherwise change the selected timeline or algorithm.
 
 #### Metric scope
@@ -147,21 +146,20 @@ Low-dopamine keeps reading and interaction available while reducing feedback and
 - **My metrics** (default): hide metrics for the automatically detected active account. If active-account signals disagree or ownership cannot be classified safely, hide the numeric metric but preserve its action.
 - **All metrics:** hide numeric engagement/view metrics across X while preserving applicable actions.
 
-Following and Followers summary links are controlled separately and hidden globally by the low-dopamine default.
+Following and Followers links follow metric scope: hidden for the active or unknown profile under My metrics, and for every profile under All metrics.
 
 #### Attention settings
 
-| Setting | Values | Low-dopamine default | Meaning |
-|---|---|---:|---|
-| Metric scope | My metrics / All metrics | My metrics | Whose post vanity metrics are hidden |
-| Profile relationship links | Shown / Hidden | Hidden | Controls Following and Followers summary links on profiles |
-| Notifications | Normal / Quiet / Hidden | Quiet | Quiet keeps nav but removes badges; Hidden removes nav |
-| Mentions & replies shortcut | Shown / Hidden | Shown | Controls a direct shortcut to `/notifications/mentions`; removable independently |
-| Messages | Normal / Quiet / Hidden | Quiet | Quiet keeps nav but removes badges; Hidden removes nav |
-| Trends | Shown / Hidden | Hidden | Controls trending-topic surfaces |
-| Recommended posts | Shown / Hidden | Hidden | Controls algorithmically suggested posts where they can be classified safely |
-| Account suggestions | Shown / Hidden | Hidden | Controls “who to follow” and similar account recommendations |
-| Premium and analytics prompts | Shown / Hidden | Hidden | Controls commercial/scoreboard prompts |
+| Setting                       | Values                   | Low-dopamine default | Meaning                                                                          |
+| ----------------------------- | ------------------------ | -------------------: | -------------------------------------------------------------------------------- |
+| Metric scope                  | My metrics / All metrics |           My metrics | Whose post vanity metrics are hidden                                             |
+| Notifications                 | Normal / Quiet / Hidden  |                Quiet | Keeps nav; Quiet softens the badge and Hidden removes the badge                  |
+| Mentions & replies shortcut   | Shown / Hidden           |                Shown | Controls a direct shortcut to `/notifications/mentions`; removable independently |
+| Messages                      | Normal / Quiet / Hidden  |                Quiet | Keeps nav; Quiet softens the badge and Hidden removes the badge                  |
+| Trends                        | Shown / Hidden           |               Hidden | Controls trending-topic surfaces                                                 |
+| Recommended posts             | Shown / Hidden           |                Shown | Controls algorithmically suggested posts where they can be classified safely     |
+| Account suggestions           | Shown / Hidden           |                Shown | Controls “who to follow” and similar account recommendations                     |
+| Premium and analytics prompts | Shown / Hidden           |               Hidden | Controls commercial/scoreboard prompts                                           |
 
 Changing these settings does not alter write-only's stricter guarantees.
 
@@ -249,34 +247,34 @@ The user never enters, confirms, or manages X handles.
 
 ## 10. Functional requirements
 
-| ID | Requirement |
-|---|---|
-| AS-001 | Expose Write-only, Low-dopamine, and Normal as mutually exclusive modes in the toolbar popup. |
-| AS-002 | Persist mode and settings in extension-local storage across tab closure, browser restart, and extension update. |
-| AS-003 | Apply a mode change to all open X tabs through storage change events, without reload. |
-| AS-004 | In Normal mode, remove all extension-owned visual and navigational effects. |
-| AS-005 | In Write-only mode, prevent timelines or reading surfaces from appearing during initial load and SPA navigation. |
-| AS-006 | Use X's native composer and publish action; never synthesize a post request. |
-| AS-007 | Keep X authentication, media upload, audience selection, thread composition, and composer validation inside X. |
-| AS-008 | Derive the active X handle from at least two current-page DOM signals without user input or persistent handle storage. |
-| AS-009 | In Low-dopamine, classify posts as active-user, other-user, or unknown. |
-| AS-010 | Hide all listed numeric metrics for active-user posts. |
-| AS-011 | Under signal disagreement or unknown ownership, hide metric numbers but retain action controls. |
-| AS-012 | Preserve repost and quote-post access through X's existing combined control/menu. |
-| AS-013 | Support a global metric-hiding scope. |
-| AS-014 | Hide Following and Followers profile-summary links entirely when configured. |
-| AS-015 | Support Normal, Quiet, and Hidden notification navigation states. |
-| AS-016 | Support Normal, Quiet, and Hidden message navigation states. |
-| AS-017 | Support an independent, removable Mentions & replies shortcut. |
-| AS-018 | Control trends, recommended posts, account suggestions, premium prompts, and analytics prompts with separate settings. |
-| AS-019 | Detect X SPA route/content changes without continuous polling or full-page rescans. |
-| AS-020 | Keep extension-injected UI visually attributable to asocial and accessible by keyboard. |
-| AS-021 | Store no post text, timeline content, handles, cookies, auth tokens, internal account IDs, or browsing history. |
-| AS-022 | Send no telemetry, analytics, user data, or remote configuration off-device. |
+| ID     | Requirement                                                                                                                                                                                       |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AS-001 | Expose Write-only, Low-dopamine, and Normal as mutually exclusive modes in the toolbar popup.                                                                                                     |
+| AS-002 | Persist mode and settings in extension-local storage across tab closure, browser restart, and extension update.                                                                                   |
+| AS-003 | Apply a mode change to all open X tabs through storage change events, without reload.                                                                                                             |
+| AS-004 | In Normal mode, remove all extension-owned visual and navigational effects.                                                                                                                       |
+| AS-005 | In Write-only mode, prevent timelines or reading surfaces from appearing during initial load and SPA navigation.                                                                                  |
+| AS-006 | Use X's native composer and publish action; never synthesize a post request.                                                                                                                      |
+| AS-007 | Keep X authentication, media upload, audience selection, thread composition, and composer validation inside X.                                                                                    |
+| AS-008 | Derive the active X handle from at least two current-page DOM signals without user input or persistent handle storage.                                                                            |
+| AS-009 | In Low-dopamine, classify posts as active-user, other-user, or unknown.                                                                                                                           |
+| AS-010 | Hide all listed numeric metrics for active-user posts.                                                                                                                                            |
+| AS-011 | Under signal disagreement or unknown ownership, hide metric numbers but retain action controls.                                                                                                   |
+| AS-012 | Preserve repost and quote-post access through X's existing combined control/menu.                                                                                                                 |
+| AS-013 | Support a global metric-hiding scope.                                                                                                                                                             |
+| AS-014 | Hide Following and Followers profile-summary links according to metric scope.                                                                                                                     |
+| AS-015 | Support Normal, Quiet, and Hidden notification badge states without removing navigation.                                                                                                          |
+| AS-016 | Support Normal, Quiet, and Hidden message badge states without removing navigation.                                                                                                               |
+| AS-017 | Support an independent, removable Mentions & replies shortcut.                                                                                                                                    |
+| AS-018 | Control trends, recommended posts, account suggestions, and combined premium/analytics prompts independently.                                                                                     |
+| AS-019 | Detect X SPA route/content changes without continuous polling or full-page rescans.                                                                                                               |
+| AS-020 | Keep extension-injected UI visually attributable to asocial and accessible by keyboard.                                                                                                           |
+| AS-021 | Store no post text, timeline content, handles, cookies, auth tokens, internal account IDs, or browsing history.                                                                                   |
+| AS-022 | Send no telemetry, analytics, user data, or remote configuration off-device.                                                                                                                      |
 | AS-023 | Provide user-visible degraded status and local selector self-tests containing mode, adapter version, active-account signal agreement, and unmatched rule IDs without post content or identifiers. |
-| AS-024 | Keep Write-only active after publishing, closing the composer, native multi-post composition, and supported self-thread replies. |
-| AS-025 | Expose X's native account switcher in Write-only only when its button and portal menu pass the strict allowlist contract. |
-| AS-026 | Keep X masked by manifest-declared static CSS until the selected mode's first safe state is complete; startup failure must reveal only an asocial recovery shell. |
+| AS-024 | Keep Write-only active after publishing, closing the composer, native multi-post composition, and supported self-thread replies.                                                                  |
+| AS-025 | Expose X's native account switcher in Write-only only when its button and portal menu pass the strict allowlist contract.                                                                         |
+| AS-026 | Keep X masked by manifest-declared static CSS until the selected mode's first safe state is complete; startup failure must reveal only an asocial recovery shell.                                 |
 
 ## 11. Non-functional requirements
 
@@ -340,11 +338,11 @@ The user never enters, confirms, or manages X handles.
 - The active account is derived automatically; no onboarding or settings field requests a handle.
 - If active-account signals disagree, all uncertain numeric metrics remain hidden.
 - On the active user's posts in home, profile, and focused-post contexts, reply, repost, like, bookmark, and view numbers are hidden.
-- Following and Followers summary links are absent from both the visual and accessibility trees when their setting is Hidden.
+- Following and Followers summary links are absent from the visual and accessibility trees according to metric scope.
 - Reply, repost/quote, like, bookmark, follow, and share controls remain keyboard- and pointer-operable.
-- “All metrics” hides the same post counts on other users' content.
-- Quiet notifications/messages keep their navigation links and remove unread dots/counts.
-- Hidden notifications/messages remove their navigation links from both visual and accessibility trees.
+- “All metrics” hides the same post and profile counts on other users' content.
+- Quiet notification/message badges remain available but visually muted.
+- Hidden notification/message badges are absent; their navigation links remain available.
 - Trends, recommended posts, and account suggestions can each be enabled or hidden without changing the other two.
 - The Mentions shortcut can be removed without changing Notifications mode.
 
@@ -384,22 +382,22 @@ MVP success is product correctness, not engagement growth:
 
 ## 14. Risks and mitigations
 
-| Risk | Consequence | Mitigation |
-|---|---|---|
-| X changes DOM structure | Hidden content leaks or controls disappear | Central adapter, fixture contracts, manual route matrix, local selector-health diagnostics |
-| Async settings or JavaScript startup delay | User sees the feed or metrics | Manifest-declared static CSS masks by default without a JavaScript marker; apply persisted mode before setting `ready` |
-| Startup code fails before mode loads | X could remain inaccessible | Fail-closed recovery shell; toolbar popup and extension disable remain deliberate escape paths |
-| Fail-closed behavior hides X after an adapter change | User cannot use the restricted surface | Recovery shell, user-visible degraded status, local selector self-test, deliberate Normal escape, and extension-disable escape |
-| Write-only masking is too permissive | Reading content leaks | Default-deny shell; allowlist only validated composer, self-thread, authentication, and account-switcher surfaces |
-| X still fetches timeline data | Unneeded network/computation may occur inside X | Do not claim request blocking; minimize asocial work and reject fragile private-request interception |
-| Metric styling removes controls | Core interactions break | Annotate/count spans separately; never hide the action container |
-| Current account is misidentified | Self metrics leak | Require profile-nav and account-switcher signals to agree; disagreement becomes unknown and hides numbers |
-| Native account switcher changes | Journal could reveal unrelated UI | Strict button/menu contract, badge suppression, and fail-closed Normal escape |
-| “Journal” implies privacy | User overshares publicly | Repeat clear audience reminder in onboarding and write-only shell |
-| Aggregate notification badge cannot identify replies | Misleading reply-only behavior | Offer quiet/hidden badge and an independently removable Mentions shortcut; do not promise categorization |
-| Release automation leaks credentials | Store account compromise | Protected environments, least-privilege secrets, manual approval, and no secrets in fork workflows |
-| X terms or store policy changes | Distribution risk | Avoid APIs, automation, scraping, remote code, or data collection; review current terms before public release |
-| Turborepo adds overhead to one app | More configuration than value | Keep one extension package initially; add shared packages only with a real second consumer |
+| Risk                                                 | Consequence                                     | Mitigation                                                                                                                     |
+| ---------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| X changes DOM structure                              | Hidden content leaks or controls disappear      | Central adapter, fixture contracts, manual route matrix, local selector-health diagnostics                                     |
+| Async settings or JavaScript startup delay           | User sees the feed or metrics                   | Manifest-declared static CSS masks by default without a JavaScript marker; apply persisted mode before setting `ready`         |
+| Startup code fails before mode loads                 | X could remain inaccessible                     | Fail-closed recovery shell; toolbar popup and extension disable remain deliberate escape paths                                 |
+| Fail-closed behavior hides X after an adapter change | User cannot use the restricted surface          | Recovery shell, user-visible degraded status, local selector self-test, deliberate Normal escape, and extension-disable escape |
+| Write-only masking is too permissive                 | Reading content leaks                           | Default-deny shell; allowlist only validated composer, self-thread, authentication, and account-switcher surfaces              |
+| X still fetches timeline data                        | Unneeded network/computation may occur inside X | Do not claim request blocking; minimize asocial work and reject fragile private-request interception                           |
+| Metric styling removes controls                      | Core interactions break                         | Annotate/count spans separately; never hide the action container                                                               |
+| Current account is misidentified                     | Self metrics leak                               | Require profile-nav and account-switcher signals to agree; disagreement becomes unknown and hides numbers                      |
+| Native account switcher changes                      | Journal could reveal unrelated UI               | Strict button/menu contract, badge suppression, and fail-closed Normal escape                                                  |
+| “Journal” implies privacy                            | User overshares publicly                        | Repeat clear audience reminder in onboarding and write-only shell                                                              |
+| Aggregate notification badge cannot identify replies | Misleading reply-only behavior                  | Offer quiet/hidden badge and an independently removable Mentions shortcut; do not promise categorization                       |
+| Release automation leaks credentials                 | Store account compromise                        | Protected environments, least-privilege secrets, manual approval, and no secrets in fork workflows                             |
+| X terms or store policy changes                      | Distribution risk                               | Avoid APIs, automation, scraping, remote code, or data collection; review current terms before public release                  |
+| Turborepo adds overhead to one app                   | More configuration than value                   | Keep one extension package initially; add shared packages only with a real second consumer                                     |
 
 ## 15. Delivery scope
 
@@ -436,9 +434,9 @@ MVP success is product correctness, not engagement growth:
 ## 16. Locked product decisions
 
 1. Write-only is persistent journal mode. Posting, closing the composer, native multi-post composition, and supported self-thread replies do not change the mode.
-2. Following and Followers summary links are hidden entirely by Low-dopamine's default.
+2. Following and Followers summary links follow the selected metric scope; My metrics hides the active user's links by default.
 3. The Mentions shortcut is shown by default and removable independently.
 4. Settings are global. Active-account identity is detected from the live page and never entered or persisted.
-5. Trends, recommended posts, and account suggestions are separate settings with Hidden defaults; user testing may revise a default without changing the schema.
+5. Trends, recommended posts, and account suggestions are independent settings. Trends default to Hidden; recommended posts and account suggestions default to Shown.
 6. asocial will never have a backend, telemetry, analytics, tracking, or remote configuration.
 7. Production quality includes minimum permissions, reproducible builds, automated verification, protected release automation, and fail-calm behavior when X changes.

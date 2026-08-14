@@ -1,0 +1,22 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "build": {
+      "outputs": [".output/**"]
+    },
+    "check": {
+      "cache": false
+    },
+    "test": {
+      "cache": false
+    },
+    "zip": {
+      "dependsOn": ["build"],
+      "outputs": [".output/*.zip"]
+    }
+  }
+}

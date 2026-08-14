@@ -1,0 +1,32 @@
+{
+  "name": "@asocial/extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "check": "pnpm build && node scripts/assert-manifest.mjs && tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "pnpm build && playwright test",
+    "zip": "wxt zip",
+    "postinstall": "wxt prepare"
+  },
+  "dependencies": {
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "@wxt-dev/module-react": "1.2.2",
+    "happy-dom": "20.11.2",
+    "sass-embedded": "1.102.0",
+    "typescript": "7.0.2",
+    "vite": "8.2.1",
+    "vite-plugin-styletyper": "0.2.2",
+    "vitest": "4.1.10",
+    "wxt": "0.21.4"
+  }
+}

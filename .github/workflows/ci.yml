@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and typecheck
+        run: pnpm check
+
+      - name: Test
+        run: pnpm test
+      - name: Install isolated Chromium
+        run: pnpm --filter @asocial/extension exec playwright install --with-deps chromium
+
+      - name: Browser extension smoke
+        run: xvfb-run -a pnpm --filter @asocial/extension test:e2e
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Package Chrome extension
+        run: pnpm zip
+
+      - name: Record checksum
+        run: sha256sum apps/extension/.output/*-chrome.zip | tee chrome-extension.sha256
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: asocial-chrome-${{ github.sha }}
+          path: |
+            apps/extension/.output/*-chrome.zip
+            chrome-extension.sha256
+          if-no-files-found: error
+          retention-days: 14

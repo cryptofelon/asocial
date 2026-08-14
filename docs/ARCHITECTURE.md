@@ -78,8 +78,8 @@ The content script is latency- and mutation-sensitive. It uses DOM APIs, a small
 
 Use two styling boundaries:
 
-- **Global non-module SCSS:** `startup-mask.scss` and `x-policies.scss`. These intentionally target `html[data-asocial-*]`, extension-owned DOM annotations, and stable X surface boundaries. CSS Modules would hash selectors that must be globally addressable and provide no type-safety benefit here.
-- **Typed SCSS Modules:** popup, options, shared React controls, and journal-shell presentation. These styles belong to elements asocial creates, so imported class maps are the correct boundary.
+- **Global non-module SCSS:** `startup-mask.scss`, `x-policies.scss`, and `journal-shell.scss`. The first two intentionally target `html[data-asocial-*]`, extension-owned DOM annotations, and stable X surface boundaries. The journal stylesheet is injected as text into a Shadow Root, so a hashed class map would provide no useful boundary.
+- **Typed SCSS Modules:** popup, options, and shared React controls. These styles belong to React elements asocial creates, so imported class maps are the correct boundary.
 
 For a Vite application, install **only** `vite-plugin-styletyper`; it already depends on and uses the `styletyper` engine. Do not add `styletyper` as a second direct dependency. Install the SCSS implementation separately for Vite:
 
@@ -87,27 +87,27 @@ For a Vite application, install **only** `vite-plugin-styletyper`; it already de
 pnpm add -D vite-plugin-styletyper sass-embedded
 ```
 
-Configure `vite-plugin-styletyper` through WXT's Vite configuration. During development it scans all modules and watches changes; during a production Vite build its `buildStart` hook awaits a full scan before bundling.
+Configure `vite-plugin-styletyper` through WXT's Vite configuration. During development it scans all modules and watches changes. During production it verifies that every module produced both generated files and fails an otherwise-successful build if generation is incomplete; imported CSS errors remain Vite's responsibility and retain Vite's richer diagnostics.
 
 Generated `*.module.*.d.ts` and `*.module.*.d.ts.map` files are compile-time artifacts and stay gitignored. The packaged extension contains only compiled CSS and JavaScript; the plugin and engine add no runtime code.
 
-A clean-checkout ordering constraint remains: the plugin cannot run during standalone `tsc` because `tsc` does not start Vite. CI therefore runs a production WXT build first, asserts that every module has its generated declaration/map, and only then runs `tsc --noEmit`. Without the assertion, Vite's permissive ambient CSS-module types could make a missing-generation failure silently pass.
+A clean checkout must run the production WXT build before standalone `tsc`, because `tsc` does not start Vite. No app-owned assertion script or second `styletyper` dependency is needed: missing declaration output is a plugin build failure, while the subsequent `tsc --noEmit` checks class usage against the generated declarations.
 
-WXT orchestrates multiple Vite builds for extension entrypoint groups. The integration spike must prove that repeated or concurrent plugin `buildStart` scans are idempotent, race-free, and do not create material build overhead. If that fails, fix the plugin/WXT integration rather than installing the CLI as a workaround.
+WXT orchestrates multiple Vite builds for extension entrypoint groups. Integration tests must prove repeated or concurrent plugin scans are idempotent and race-free. If that fails, fix the plugin/WXT integration rather than adding a consumer-side generator or assertion workaround.
 
 Initial style inventory:
 
-| Style | Kind | Importer |
-|---|---|---|
-| `popup.module.scss` | typed module | `Popup.tsx` |
-| `options.module.scss` | typed module | `Options.tsx` |
-| `mode-picker.module.scss` | typed module | `ModePicker.tsx` |
-| `settings-form.module.scss` | typed module | `SettingsForm.tsx` |
-| `journal-shell.module.scss` | typed module, injected into the Shadow Root | `journal-shell/mount.ts` |
-| `startup-mask.scss` | global static content style | `entrypoints/content.ts` |
-| `x-policies.scss` | global content policy style | `entrypoints/content.ts` |
+| Style                       | Kind                                                           | Importer                 |
+| --------------------------- | -------------------------------------------------------------- | ------------------------ |
+| `popup.module.scss`         | typed module                                                   | `Popup.tsx`              |
+| `options.module.scss`       | typed module                                                   | `Options.tsx`            |
+| `mode-picker.module.scss`   | typed module                                                   | `ModePicker.tsx`         |
+| `settings-form.module.scss` | typed module                                                   | `SettingsForm.tsx`       |
+| `journal-shell.scss`        | global class names, injected only into the journal Shadow Root | `journal-shell/mount.ts` |
+| `startup-mask.scss`         | global static content style                                    | `entrypoints/content.ts` |
+| `x-policies.scss`           | global content policy style                                    | `entrypoints/content.ts` |
 
-That is **five SCSS Modules plus two global SCSS files**. Exactly **six source files import styles**; `content.ts` imports both global files. Do not split styles further until a component or loading boundary requires it.
+That is **four SCSS Modules plus three non-module SCSS files**. Exactly **six source files import styles**; `content.ts` imports both page-level global files. Do not split styles further until a component or loading boundary requires it.
 
 ### 3.4 pnpm workspace and Turborepo
 
@@ -162,7 +162,7 @@ asocial/
 │       │   │   └── surfaces.ts
 │       │   ├── journal-shell/
 │       │   │   ├── mount.ts
-│       │   │   └── journal-shell.module.scss
+│       │   │   └── journal-shell.scss
 │       │   └── ui/
 │       │       ├── ModePicker.tsx
 │       │       ├── mode-picker.module.scss
@@ -177,8 +177,6 @@ asocial/
 │       │   ├── adapter.test.ts
 │       │   ├── mode-controller.test.ts
 │       │   └── settings.test.ts
-│       ├── scripts/
-│       │   └── assert-style-types.mjs
 │       ├── package.json
 │       ├── tsconfig.json
 │       └── wxt.config.ts
@@ -256,23 +254,20 @@ Keep one versioned global object and normalize every read from storage. Account 
 
 ```ts
 type Mode = "normal" | "low-dopamine" | "write-only";
-type Visibility = "normal" | "quiet" | "hidden";
-type Toggle = "shown" | "hidden";
+type MetricScope = "self" | "all";
+type AttentionLevel = "normal" | "quiet" | "hidden";
 
 type SettingsV1 = {
   schemaVersion: 1;
   mode: Mode;
-  lowDopamine: {
-    metricScope: "self" | "all";
-    profileRelationshipLinks: Toggle;
-    notifications: Visibility;
-    messages: Visibility;
-    mentionsShortcut: Toggle;
-    trends: Toggle;
-    recommendedPosts: Toggle;
-    accountSuggestions: Toggle;
-    premiumAndAnalytics: Toggle;
-  };
+  metricScope: MetricScope;
+  notificationBadges: AttentionLevel;
+  messageBadges: AttentionLevel;
+  mentionsShortcut: boolean;
+  hideTrends: boolean;
+  hideRecommendedPosts: boolean;
+  hideAccountSuggestions: boolean;
+  hidePremiumAndAnalytics: boolean;
 };
 ```
 
@@ -282,17 +277,14 @@ Defaults:
 const defaults: SettingsV1 = {
   schemaVersion: 1,
   mode: "normal",
-  lowDopamine: {
-    metricScope: "self",
-    profileRelationshipLinks: "hidden",
-    notifications: "quiet",
-    messages: "quiet",
-    mentionsShortcut: "shown",
-    trends: "hidden",
-    recommendedPosts: "hidden",
-    accountSuggestions: "hidden",
-    premiumAndAnalytics: "hidden",
-  },
+  metricScope: "self",
+  notificationBadges: "quiet",
+  messageBadges: "quiet",
+  mentionsShortcut: true,
+  hideTrends: true,
+  hideRecommendedPosts: false,
+  hideAccountSuggestions: false,
+  hidePremiumAndAnalytics: true,
 };
 ```
 
@@ -338,7 +330,7 @@ The absence of `ready` is the safe state. If JavaScript is delayed, X remains ma
 
 The term **Write-only** describes the X user experience, not storage semantics. `chrome.storage.local` is intentionally read/write: mode changes are written, and the mode is read on every X document start. It persists Write-only across tab closure, browser restart, and extension update.
 
-The initial `visibility` curtain is only a pre-classification safety mechanism. After Write-only is established, disallowed X regions use `display: none` or equivalent structural removal so they consume no layout, paint, pointer, or accessibility work.
+The initial `visibility` curtain is the same default-deny mechanism used by Write-only. Hidden X roots retain no paint, pointer access, or accessibility exposure; explicitly allowlisted native dialogs override `visibility` and pointer handling without requiring brittle ancestor rewrites. The fixed journal shell covers retained layout.
 
 Test the built unpacked extension—not a source approximation—with cache disabled and CPU/network throttling. Cover cold tab open, browser restart, extension update, slow storage, and injected startup failure using Chrome navigation filmstrips. “No flash” is a measured release invariant.
 
@@ -435,7 +427,6 @@ Use a closed union rather than arbitrary selector strings in modes:
 type Surface =
   | "post"
   | "profile-relationship-link"
-  | "profile-post-count"
   | "reply-metric"
   | "repost-metric"
   | "like-metric"
@@ -514,9 +505,7 @@ Conceptual markup after annotation:
 Conceptual policy CSS:
 
 ```css
-html[data-asocial-mode="low-dopamine"]
-  [data-asocial-owner="self"]
-  [data-asocial-metric] {
+html[data-asocial-mode="low-dopamine"] [data-asocial-owner="self"] [data-asocial-metric] {
   display: none !important;
 }
 ```
@@ -535,7 +524,7 @@ Write-only is persistent and default-deny.
 
 - Add one fixed `#asocial-root` sibling under `body`.
 - Attach a Shadow Root so X styles cannot accidentally restyle the shell.
-- Apply `journal-shell.module.scss` inside that Shadow Root through the WXT UI injection path; validate the compiled class map and injected stylesheet in the production build.
+- Inject `journal-shell.scss` as text inside that Shadow Root; use stable local class names because X cannot address through the shadow boundary.
 - Include product name, “Write on X,” the audience reminder, in-memory active-account status, and a recovery link that opens extension settings.
 - Keep mode switching in the extension toolbar/options surface; do not imitate X navigation.
 
@@ -625,8 +614,8 @@ Use native form elements where possible. No design-system dependency is needed.
 
 - Six TSX files total.
 - Four React components.
-- Five typed SCSS Modules.
-- Two global SCSS files.
+- Four typed SCSS Modules.
+- Three non-module SCSS files, including the Shadow Root journal stylesheet.
 - Six source files import styles.
 - Zero React roots in the X content path.
 
@@ -639,20 +628,17 @@ Most state propagation needs no background worker:
 - open tabs apply the new settings directly;
 - browser restart reloads the persisted mode before revealing X.
 
-For diagnostics, the popup may send a one-shot message to the active X content script and receive:
+For diagnostics, the popup sends a one-shot message to the active X content script:
 
 ```ts
-type AdapterStatus = {
-  adapterVersion: string;
+type RuntimeStatus = {
   mode: Mode;
-  startup: "ready" | "degraded";
-  routeClass: string;
-  activeAccount: "known" | "unknown";
-  requiredRules: Record<string, "matched" | "missing" | "not-applicable">;
+  adapter: "inactive" | "ready" | "degraded";
+  route: "auth" | "compose" | "status" | "reading";
 };
 ```
 
-The recovery shell, popup, and options page surface degraded status and a selector self-test locally. A copyable diagnostic report contains only adapter version, mode, route class, signal state, and rule IDs. It never includes DOM text, handles, full URLs, account IDs, post identifiers, or browsing history.
+The recovery shell and popup surface degraded status locally. The response contains no DOM text, handles, URLs, account IDs, post identifiers, or browsing history.
 
 Add a background service worker only if a later requirement cannot be met by popup/options/content contexts—for example, a browser command that must work with no X tab loaded. Release automation is external CI and does not justify runtime background code.
 
@@ -696,9 +682,8 @@ A public Chrome Web Store release still needs an accurate privacy policy and dis
 ### Style pipeline tests
 
 - start WXT development from a clean checkout and prove all SCSS Module declarations appear;
-- run a production WXT build with `vite-plugin-styletyper` before standalone TypeScript;
-- assert every SCSS Module has its generated declaration/map before `tsc --noEmit`;
-- prove every SCSS Module class reference type-checks with the generated declarations;
+- run a production WXT build before standalone TypeScript and prove the plugin rejects a broken unimported module;
+- prove every SCSS Module class reference type-checks with generated declarations;
 - verify repeated/concurrent WXT entrypoint builds are idempotent and race-free;
 - verify generated declarations/maps are untracked and absent from the package;
 - verify `startup-mask.scss` and `x-policies.scss` compile to manifest-declared static CSS;
@@ -745,7 +730,7 @@ Run a built unpacked extension in Chromium against synthetic pages to verify:
 
 ### Authenticated manual release matrix
 
-Do not put X credentials in CI. Before a release, manually exercise current X in Chrome:
+Do not put X credentials in CI. Before a release, manually exercise current X in Chrome and Brave with a dedicated test account:
 
 - home/Following/For You;
 - own profile and another profile;
@@ -769,11 +754,10 @@ Record rule health, performance traces, and navigation filmstrips without user c
 Root Turbo tasks forward only real package tasks:
 
 - `dev` — persistent WXT development task with `vite-plugin-styletyper`;
-- `build` — reproducible WXT build; generates typed module declarations before bundling;
-- `assert-style-types` — verify every SCSS Module has its generated declaration/map;
-- `check` — run after `build`; assert style types, then TypeScript and focused static checks;
-- `test` — deterministic unit/adapter contracts;
-- `zip` — package the already verified WXT output;
+- `build` — reproducible WXT build; generation is a hard plugin-owned precondition;
+- `check` — run `build`, then standalone TypeScript and focused static checks;
+- `test` — deterministic unit and adapter contracts;
+- `zip` — package the verified WXT output;
 - `submit` — protected WXT store submission, never a normal local default.
 
 Do not run the persistent `dev` task through a normal finite CI command.

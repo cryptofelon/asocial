@@ -1,0 +1,57 @@
+html[data-asocial-mode="low-dopamine"][data-asocial-metric-scope="all"] [data-asocial-metric],
+html[data-asocial-mode="low-dopamine"][data-asocial-metric-scope="self"]
+  [data-asocial-owner="self"]
+  [data-asocial-metric],
+html[data-asocial-mode="low-dopamine"][data-asocial-metric-scope="self"]
+  [data-asocial-owner="unknown"]
+  [data-asocial-metric] {
+  display: none !important;
+}
+
+html[data-asocial-mode="low-dopamine"][data-asocial-metric-scope="all"]
+  [data-asocial-profile-metric],
+html[data-asocial-mode="low-dopamine"][data-asocial-metric-scope="self"]
+  [data-asocial-profile-metric][data-asocial-owner="self"],
+html[data-asocial-mode="low-dopamine"][data-asocial-metric-scope="self"]
+  [data-asocial-profile-metric][data-asocial-owner="unknown"] {
+  display: none !important;
+}
+
+html[data-asocial-mode="low-dopamine"][data-asocial-notification-badges="quiet"]
+  [data-asocial-badge="notifications"],
+html[data-asocial-mode="low-dopamine"][data-asocial-message-badges="quiet"]
+  [data-asocial-badge="messages"] {
+  filter: grayscale(1);
+  opacity: 0.35;
+}
+
+html[data-asocial-mode="low-dopamine"][data-asocial-notification-badges="hidden"]
+  [data-asocial-badge="notifications"],
+html[data-asocial-mode="low-dopamine"][data-asocial-message-badges="hidden"]
+  [data-asocial-badge="messages"] {
+  display: none !important;
+}
+
+html[data-asocial-mode="low-dopamine"][data-asocial-hide-trends="true"]
+  [data-asocial-surface="trends"],
+html[data-asocial-mode="low-dopamine"][data-asocial-hide-recommended-posts="true"]
+  [data-asocial-surface="recommended-posts"],
+html[data-asocial-mode="low-dopamine"][data-asocial-hide-account-suggestions="true"]
+  [data-asocial-surface="account-suggestions"],
+html[data-asocial-mode="low-dopamine"][data-asocial-hide-premium="true"]
+  [data-asocial-surface="premium"] {
+  display: none !important;
+}
+
+html[data-asocial-mode="write-only"] [data-asocial-allowed="composer"],
+html[data-asocial-mode="write-only"] [data-asocial-allowed="account-switcher"],
+html[data-asocial-mode="write-only"] [data-asocial-allowed="alert"] {
+  position: relative;
+  z-index: 2147483646;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-asocial-badge] {
+    transition: none !important;
+  }
+}

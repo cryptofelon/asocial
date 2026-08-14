@@ -1,0 +1,20 @@
+{
+  "extends": "./.wxt/tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "jsx": "react-jsx",
+    "types": ["vite/client"]
+  },
+  "include": [
+    "entrypoints",
+    "src",
+    "tests",
+    "wxt.config.ts",
+    "vitest.config.ts",
+    ".wxt/types/**/*.d.ts"
+  ]
+}

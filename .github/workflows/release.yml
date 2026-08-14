@@ -1,0 +1,93 @@
+name: Release Chrome and Brave
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Validate package and Chrome credentials without submitting
+        type: boolean
+        default: true
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: chrome-web-store-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: chrome-web-store
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify release candidate
+        run: |
+          pnpm check
+          pnpm test
+          pnpm lint
+          pnpm format:check
+      - name: Install isolated Chromium
+        run: pnpm --filter @asocial/extension exec playwright install --with-deps chromium
+
+      - name: Browser extension smoke
+        run: xvfb-run -a pnpm --filter @asocial/extension test:e2e
+
+      - name: Require tag and package versions to match
+        if: github.event_name == 'push'
+        run: test "$GITHUB_REF_NAME" = "v$(node -p 'require("./apps/extension/package.json").version')"
+
+      - name: Build signed input archive
+        run: |
+          pnpm zip
+          sha256sum apps/extension/.output/*-chrome.zip | tee chrome-extension.sha256
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: asocial-chrome-${{ github.ref_name }}
+          path: |
+            apps/extension/.output/*-chrome.zip
+            chrome-extension.sha256
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Validate Chrome Web Store submission
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
+        run: pnpm --filter @asocial/extension exec wxt submit --dry-run --chrome-zip .output/*-chrome.zip
+        env:
+          CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+
+      - name: Submit Chrome Web Store release
+        if: github.event_name == 'push' || !inputs.dry_run
+        run: pnpm --filter @asocial/extension exec wxt submit --chrome-zip .output/*-chrome.zip
+        env:
+          CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+
+      - name: Create GitHub release
+        if: github.event_name == 'push'
+        run: gh release create "$GITHUB_REF_NAME" apps/extension/.output/*-chrome.zip chrome-extension.sha256 --generate-notes --verify-tag
+        env:
+          GH_TOKEN: ${{ github.token }}
