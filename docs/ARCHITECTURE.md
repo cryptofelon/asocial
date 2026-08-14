@@ -81,25 +81,19 @@ Use two styling boundaries:
 - **Global non-module SCSS:** `startup-mask.scss` and `x-policies.scss`. These intentionally target `html[data-asocial-*]`, extension-owned DOM annotations, and stable X surface boundaries. CSS Modules would hash selectors that must be globally addressable and provide no type-safety benefit here.
 - **Typed SCSS Modules:** popup, options, shared React controls, and journal-shell presentation. These styles belong to elements asocial creates, so imported class maps are the correct boundary.
 
-Use both packages from [`cryptofelon/styletyper`](https://github.com/cryptofelon/styletyper) as direct development dependencies:
+For a Vite application, install **only** `vite-plugin-styletyper`; it already depends on and uses the `styletyper` engine. Do not add `styletyper` as a second direct dependency. Install the SCSS implementation separately for Vite:
 
-- `vite-plugin-styletyper` in WXT's Vite configuration for development and build-time generation;
-- `styletyper` as the explicit CLI used before standalone type-checks on a fresh checkout.
-
-WXT orchestrates Vite builds, so validate the plugin under `wxt dev`, `wxt build`, and production packaging rather than assuming a plain Vite example is sufficient. The CLI keeps `tsc` deterministic even when Vite has not run:
-
-```json
-{
-  "scripts": {
-    "styles:types": "styletyper apps/extension",
-    "check": "pnpm styles:types && tsc --noEmit"
-  }
-}
+```sh
+pnpm add -D vite-plugin-styletyper sass-embedded
 ```
 
-Generated `*.module.*.d.ts` and `*.module.*.d.ts.map` files are compile-time artifacts and stay gitignored. The packaged extension contains only compiled CSS and JavaScript; styletyper adds no runtime code.
+Configure `vite-plugin-styletyper` through WXT's Vite configuration. During development it scans all modules and watches changes; during a production Vite build its `buildStart` hook awaits a full scan before bundling.
 
-Pin `styletyper` and `vite-plugin-styletyper` to compatible exact versions and drive both from one checked-in options module. CI performs a parity check: generate declarations from a clean tree with the CLI, hash them, remove them, regenerate through a production WXT build, and compare the hashes. This prevents dev/build type-generation drift while keeping artifacts untracked.
+Generated `*.module.*.d.ts` and `*.module.*.d.ts.map` files are compile-time artifacts and stay gitignored. The packaged extension contains only compiled CSS and JavaScript; the plugin and engine add no runtime code.
+
+A clean-checkout ordering constraint remains: the plugin cannot run during standalone `tsc` because `tsc` does not start Vite. CI therefore runs a production WXT build first, asserts that every module has its generated declaration/map, and only then runs `tsc --noEmit`. Without the assertion, Vite's permissive ambient CSS-module types could make a missing-generation failure silently pass.
+
+WXT orchestrates multiple Vite builds for extension entrypoint groups. The integration spike must prove that repeated or concurrent plugin `buildStart` scans are idempotent, race-free, and do not create material build overhead. If that fails, fix the plugin/WXT integration rather than installing the CLI as a workaround.
 
 Initial style inventory:
 
@@ -183,6 +177,8 @@ asocial/
 │       │   ├── adapter.test.ts
 │       │   ├── mode-controller.test.ts
 │       │   └── settings.test.ts
+│       ├── scripts/
+│       │   └── assert-style-types.mjs
 │       ├── package.json
 │       ├── tsconfig.json
 │       └── wxt.config.ts
@@ -699,13 +695,14 @@ A public Chrome Web Store release still needs an accurate privacy policy and dis
 
 ### Style pipeline tests
 
-- run `styletyper` before standalone TypeScript checks on a clean checkout;
-- prove every SCSS Module class reference type-checks;
-- run WXT development and production builds with `vite-plugin-styletyper`;
+- start WXT development from a clean checkout and prove all SCSS Module declarations appear;
+- run a production WXT build with `vite-plugin-styletyper` before standalone TypeScript;
+- assert every SCSS Module has its generated declaration/map before `tsc --noEmit`;
+- prove every SCSS Module class reference type-checks with the generated declarations;
+- verify repeated/concurrent WXT entrypoint builds are idempotent and race-free;
 - verify generated declarations/maps are untracked and absent from the package;
 - verify `startup-mask.scss` and `x-policies.scss` compile to manifest-declared static CSS;
 - verify journal-shell styles are injected inside its Shadow Root.
-- verify CLI and WXT-plugin declaration hashes match from clean generation with one shared options source;
 
 ### DOM adapter contract tests
 
@@ -771,12 +768,12 @@ Record rule health, performance traces, and navigation filmstrips without user c
 
 Root Turbo tasks forward only real package tasks:
 
-- `styles:types` — one-shot styletyper CLI generation;
-- `dev` — persistent WXT development task with the styletyper Vite plugin;
-- `check` — style generation, TypeScript, and focused static checks;
+- `dev` — persistent WXT development task with `vite-plugin-styletyper`;
+- `build` — reproducible WXT build; generates typed module declarations before bundling;
+- `assert-style-types` — verify every SCSS Module has its generated declaration/map;
+- `check` — run after `build`; assert style types, then TypeScript and focused static checks;
 - `test` — deterministic unit/adapter contracts;
-- `build` — reproducible unpacked extension build;
-- `zip` — WXT package artifact after `build`;
+- `zip` — package the already verified WXT output;
 - `submit` — protected WXT store submission, never a normal local default.
 
 Do not run the persistent `dev` task through a normal finite CI command.
@@ -788,9 +785,9 @@ Every pull request and main-branch push runs:
 1. checkout without persisted credentials;
 2. exact Node/Corepack/pnpm toolchain setup;
 3. `pnpm install --frozen-lockfile`;
-4. `pnpm styles:types`;
-5. checks and deterministic tests;
-6. production WXT build;
+4. production WXT build, which runs `vite-plugin-styletyper`;
+5. assert generated per-module declarations/maps exist;
+6. TypeScript/static checks and deterministic tests;
 7. built-manifest permission/host allowlist inspection;
 8. package scan for remote code, analytics endpoints, and generated style declarations.
 
@@ -864,7 +861,7 @@ Technically preferable for one package, but not selected because the requested p
 ## 21. Implementation order
 
 1. Scaffold the sparse pnpm/Turbo/WXT repository and pin the toolchain.
-2. Integrate Sass, `styletyper`, and `vite-plugin-styletyper`; prove clean-checkout type generation and production WXT CSS output.
+2. Integrate `sass-embedded` and `vite-plugin-styletyper` only; prove clean-checkout WXT generation, declaration assertions, standalone type-checking, concurrent entrypoint safety, and production CSS output.
 3. Implement global settings normalization/repository and the three-mode popup.
 4. Implement the static startup mask, fail-closed recovery shell, mode controller, cleanup, and cross-tab/restart propagation against synthetic pages.
 5. Spike current live X active-account and account-switcher DOM surfaces; document the smallest semantic contracts.
