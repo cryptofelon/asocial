@@ -273,9 +273,10 @@ The user never enters, confirms, or manages X handles.
 | AS-020 | Keep extension-injected UI visually attributable to asocial and accessible by keyboard. |
 | AS-021 | Store no post text, timeline content, handles, cookies, auth tokens, internal account IDs, or browsing history. |
 | AS-022 | Send no telemetry, analytics, user data, or remote configuration off-device. |
-| AS-023 | Provide local diagnostics containing mode, adapter version, active-account signal agreement, and unmatched rule IDs without post content or identifiers. |
+| AS-023 | Provide user-visible degraded status and local selector self-tests containing mode, adapter version, active-account signal agreement, and unmatched rule IDs without post content or identifiers. |
 | AS-024 | Keep Write-only active after publishing, closing the composer, native multi-post composition, and supported self-thread replies. |
 | AS-025 | Expose X's native account switcher in Write-only only when its button and portal menu pass the strict allowlist contract. |
+| AS-026 | Keep X masked by manifest-declared static CSS until the selected mode's first safe state is complete; startup failure must reveal only an asocial recovery shell. |
 
 ## 11. Non-functional requirements
 
@@ -297,12 +298,12 @@ The user never enters, confirms, or manages X handles.
 - Annotate stable containers with asocial-owned attributes; mode CSS consumes those attributes.
 - Process only added/changed subtrees and batch work; never rescan the full document on every mutation.
 - When a selector fails, preserve X action controls and hide uncertain numeric metrics.
-- If write-only cannot safely identify a composer, keep reading content masked and show a recovery message with a Normal-mode escape.
+- If write-only cannot safely identify an allowed surface, keep reading content masked, show degraded selector status, and provide a deliberate Normal-mode escape.
 
 ### Performance
 
 - Persist the selected mode locally so restrictive startup never waits for network state.
-- Inject the compiled startup mask statically through the manifest and set its marker synchronously at `document_start`.
+- Inject the compiled startup mask statically through the manifest; it must mask by default without waiting for a JavaScript-added marker.
 - Do not reveal X until the stored mode's first safe state is applied.
 - In Write-only, do not annotate or scan timeline posts; observe only composer, account-switcher, authentication, and route boundaries.
 - After safe classification, remove disallowed X regions from layout and the accessibility tree rather than leaving an invisible interactive page.
@@ -312,6 +313,7 @@ The user never enters, confirms, or manages X handles.
 - A DOM mutation should be processed once per batch and only within the affected subtree.
 - Mode changes should be visibly applied by the next animation frame after settings arrive.
 - Measure startup with browser navigation filmstrips and mutation-processing benchmarks; performance claims require recorded evidence.
+- Test the built extension with cache disabled and CPU/network throttling; source-level CSS tests are insufficient proof of no flash.
 
 ### Accessibility
 
@@ -357,6 +359,7 @@ The user never enters, confirms, or manages X handles.
 - The native account-switcher button and portal menu can switch accounts without revealing timelines, badges, or unrelated navigation.
 - During account switching, active-account disagreement exposes no self-specific metrics.
 - If composer or account-switcher detection fails, X remains masked and a Normal-mode recovery path remains available.
+- Required-rule failure is visible in the recovery shell and popup, and the local selector self-test contains no content or handles.
 
 ### Privacy and performance
 
@@ -384,8 +387,9 @@ MVP success is product correctness, not engagement growth:
 | Risk | Consequence | Mitigation |
 |---|---|---|
 | X changes DOM structure | Hidden content leaks or controls disappear | Central adapter, fixture contracts, manual route matrix, local selector-health diagnostics |
-| Async settings cause a first-paint flash | User sees the feed or metrics | Static startup mask plus synchronous `document_start` marker; apply persisted mode before reveal |
+| Async settings or JavaScript startup delay | User sees the feed or metrics | Manifest-declared static CSS masks by default without a JavaScript marker; apply persisted mode before setting `ready` |
 | Startup code fails before mode loads | X could remain inaccessible | Fail-closed recovery shell; toolbar popup and extension disable remain deliberate escape paths |
+| Fail-closed behavior hides X after an adapter change | User cannot use the restricted surface | Recovery shell, user-visible degraded status, local selector self-test, deliberate Normal escape, and extension-disable escape |
 | Write-only masking is too permissive | Reading content leaks | Default-deny shell; allowlist only validated composer, self-thread, authentication, and account-switcher surfaces |
 | X still fetches timeline data | Unneeded network/computation may occur inside X | Do not claim request blocking; minimize asocial work and reject fragile private-request interception |
 | Metric styling removes controls | Core interactions break | Annotate/count spans separately; never hide the action container |

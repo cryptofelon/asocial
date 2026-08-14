@@ -99,6 +99,8 @@ WXT orchestrates Vite builds, so validate the plugin under `wxt dev`, `wxt build
 
 Generated `*.module.*.d.ts` and `*.module.*.d.ts.map` files are compile-time artifacts and stay gitignored. The packaged extension contains only compiled CSS and JavaScript; styletyper adds no runtime code.
 
+Pin `styletyper` and `vite-plugin-styletyper` to compatible exact versions and drive both from one checked-in options module. CI performs a parity check: generate declarations from a clean tree with the CLI, hash them, remove them, regenerate through a production WXT build, and compare the hashes. This prevents dev/build type-generation drift while keeping artifacts untracked.
+
 Initial style inventory:
 
 | Style | Kind | Importer |
@@ -314,32 +316,35 @@ Normalization rules:
 
 ### Sequence
 
-1. WXT compiles `startup-mask.scss` to a statically declared content stylesheet, injected before DOM construction/rendering.
-2. At `document_start`, the first content-script statements mark the document `data-asocial-startup="pending"` and schedule a recovery-shell timeout.
-3. The startup mask hides page rendering while that marker is pending.
-4. Read and normalize the global settings from `chrome.storage.local`.
-5. Apply the stored mode:
-   - Normal: remove the mask without starting a DOM observer.
-   - Low-dopamine: classify active identity and required existing surfaces, apply policy, then reveal.
-   - Write-only: mount the journal shell, install the default-deny page policy, then reveal only the shell/allowlisted controls.
-6. Change startup state to `ready`.
-7. Cancel the recovery timeout.
+1. WXT compiles `startup-mask.scss` to a statically declared content stylesheet. The built manifest must list the compiled file in `content_scripts[].css` with `run_at: "document_start"`.
+2. The static stylesheet masks X **without requiring a JavaScript-added marker**.
+3. At `document_start`, the first content-script statements schedule a recovery-shell timeout and read normalized global settings from `chrome.storage.local`.
+4. Apply the stored mode:
+   - Normal: prepare no policy or observer.
+   - Low-dopamine: classify active identity and required existing surfaces, then apply policy.
+   - Write-only: mount the journal shell and install the default-deny structural policy.
+5. Set `data-asocial-startup="ready"` only after the selected mode's first safe state is complete.
+6. Cancel the recovery timeout.
 
 Conceptual SCSS:
 
 ```scss
-html[data-asocial-startup="pending"] body {
+html:not([data-asocial-startup="ready"]) body > :not(#asocial-root) {
   visibility: hidden !important;
+}
+
+#asocial-root {
+  visibility: visible !important;
 }
 ```
 
-The timeout does **not** reveal X. If storage or startup fails, it mounts an asocial-owned recovery shell while X remains masked. The toolbar popup provides a deliberate Normal-mode escape. This chooses a temporary lockout over an attention leak; disabling the extension always removes its static styles.
+The absence of `ready` is the safe state. If JavaScript is delayed, X remains masked. If storage or startup fails, the timeout mounts an asocial-owned recovery shell while X remains masked. The shell and toolbar popup show a degraded-state message, expose selector/self-test status, and provide a deliberate Normal-mode escape. Disabling the extension always removes its static styles.
 
-`chrome.storage.local` persists Write-only across tab closure, browser restart, and extension update. Reopening X therefore repeats the masked startup and returns to the journal rather than briefly painting a feed.
+The term **Write-only** describes the X user experience, not storage semantics. `chrome.storage.local` is intentionally read/write: mode changes are written, and the mode is read on every X document start. It persists Write-only across tab closure, browser restart, and extension update.
 
 The initial `visibility` curtain is only a pre-classification safety mechanism. After Write-only is established, disallowed X regions use `display: none` or equivalent structural removal so they consume no layout, paint, pointer, or accessibility work.
 
-Test cold tab open, browser restart, extension update, slow storage, and injected startup failure with Chrome navigation filmstrips. “No flash” is a measured release invariant, not an assumption.
+Test the built unpacked extension—not a source approximation—with cache disabled and CPU/network throttling. Cover cold tab open, browser restart, extension update, slow storage, and injected startup failure using Chrome navigation filmstrips. “No flash” is a measured release invariant.
 
 ## 9. Mode controller
 
@@ -491,6 +496,7 @@ Use one `MutationObserver` per active restrictive mode:
 - compare `location.pathname` once per batch to detect route changes;
 - listen to `popstate` as an additional signal;
 - use the browser Navigation API only as an optional progressive enhancement.
+- Re-run active-account signals whenever their observed link/button nodes or relevant attributes change, including account-switch SPA transitions.
 
 Do not monkey-patch `history.pushState` in X's main JavaScript world. A normal route change produces DOM mutations; route comparison during those batches avoids page-world injection.
 
@@ -603,7 +609,7 @@ asocial can guarantee that reading surfaces are not rendered. It cannot guarante
 - “Write on X” action in write-only;
 - active-account signal status (`known`/`unknown`) without displaying or persisting the handle;
 - link to detailed settings;
-- adapter health warning when the active X tab reports required rule failures.
+- user-visible degraded-state warning and selector self-test when required rules fail.
 
 ### Options/onboarding
 
@@ -614,7 +620,7 @@ asocial can guarantee that reading surfaces are not rendered. It cannot guarante
 - low-dopamine settings;
 - independently removable Mentions shortcut;
 - independent trend, recommended-post, and account-suggestion toggles;
-- local diagnostics and reset;
+- local selector self-test, diagnostics, copy-safe rule report, and reset;
 - no handle field, account login, cloud account, telemetry consent, or analytics preference.
 
 Use native form elements where possible. No design-system dependency is needed.
@@ -643,13 +649,14 @@ For diagnostics, the popup may send a one-shot message to the active X content s
 type AdapterStatus = {
   adapterVersion: string;
   mode: Mode;
+  startup: "ready" | "degraded";
   routeClass: string;
   activeAccount: "known" | "unknown";
   requiredRules: Record<string, "matched" | "missing" | "not-applicable">;
 };
 ```
 
-Do not include DOM text, handles, full URLs, account IDs, post identifiers, or browsing history.
+The recovery shell, popup, and options page surface degraded status and a selector self-test locally. A copyable diagnostic report contains only adapter version, mode, route class, signal state, and rule IDs. It never includes DOM text, handles, full URLs, account IDs, post identifiers, or browsing history.
 
 Add a background service worker only if a later requirement cannot be met by popup/options/content contexts—for example, a browser command that must work with no X tab loaded. Release automation is external CI and does not justify runtime background code.
 
@@ -698,6 +705,7 @@ A public Chrome Web Store release still needs an accurate privacy policy and dis
 - verify generated declarations/maps are untracked and absent from the package;
 - verify `startup-mask.scss` and `x-policies.scss` compile to manifest-declared static CSS;
 - verify journal-shell styles are injected inside its Shadow Root.
+- verify CLI and WXT-plugin declaration hashes match from clean generation with one shared options source;
 
 ### DOM adapter contract tests
 
